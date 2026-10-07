@@ -81,6 +81,15 @@ behalve op een feestdag of tijdens een sluiting. Bij het aanzetten kan een vaste
 en volume gekozen worden. Er wordt enkel geschakeld bij een wijziging in planning of kalender,
 dus wie tussendoor manueel schakelt wordt niet meteen overruled.
 
+**Andere uren in zomer- en wintertijd:** maak twee Schema helpers (bv. `schedule.openingsuren_zomer`
+en `schedule.openingsuren_winter`) en een template binary sensor (Helpers → Template → Binaire sensor)
+met deze toestand, en kies die sensor als weekplanning in de blueprint:
+
+```jinja
+{% if now().dst() and now().dst().total_seconds() > 0 %}{{ is_state('schedule.openingsuren_zomer', 'on') }}
+{% else %}{{ is_state('schedule.openingsuren_winter', 'on') }}{% endif %}
+```
+
 De blueprint voor boodschappen heeft dezelfde optie om niet te spelen tijdens feestdagen en sluitingen.
 
 
