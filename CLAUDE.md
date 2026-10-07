@@ -24,7 +24,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Tekst naar spraak omroepen via Google Translate (tekstvak en knop op dashboard)
 - [x] Tekst naar spraak opslaan als vaste boodschap (mp3 in /media/omroep, daarna kiesbaar en inplanbaar)
 - [x] Klant kan mp3 boodschappen kiezen en afspelen (keuzelijst uit /media/omroep)
-- [ ] Uploaden van mp3 kan enkel als HA beheerder (HA vereist admin voor media upload); Jérome is gewone gebruiker: eigen uploadmogelijkheid bouwen of via Matthias
+- [x] Uploaden van mp3 niet nodig voor de klant (beslissing Matthias): uploadknop en uitleg van het dashboard gehaald; nieuwe boodschappen via tekst opslaan
 - [x] Kalender op dashboard werkt niet volgens Matthias: nakijken, sluitingen toevoegen mogelijk maken
 - [x] Op de HA van de klant: schema's zomer (ma tot vr 7:00 tot 17:30) en winter (ma tot vr 7:30 tot 12:00), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
 - [x] Repo publiek: installatie op de Pi via HACS (aangepaste repository), blueprints importeren via URL
