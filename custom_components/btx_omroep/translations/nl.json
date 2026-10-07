@@ -29,6 +29,10 @@
           "basis_url": "Enkel invullen als de tuner Home Assistant niet vindt, bv. http://192.168.1.10:8123"
         }
       }
+    },
+    "error": {
+      "niet_bereikbaar": "Tuner niet bereikbaar met deze PIN.",
+      "ongeldige_url": "Geef een URL zoals http://192.168.1.10:8123 (zonder pad)."
     }
   },
   "entity": {

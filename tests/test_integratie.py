@@ -47,7 +47,13 @@ async def nep(socket_enabled):
 
 
 @pytest.fixture
-async def ingesteld(hass: HomeAssistant, nep, tmp_path):
+async def ingesteld(hass: HomeAssistant, nep, tmp_path, hass_client_no_auth):
+    # echte HTTP server van HA, zodat de nagebootste tuner het bestand echt ophaalt
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "http", {})
+    client = await hass_client_no_auth()
+    basis = str(client.make_url("")).rstrip("/")
     hass.config.media_dirs = {"local": str(tmp_path)}
     (tmp_path / "omroep").mkdir()
     (tmp_path / "omroep" / "test bericht.mp3").write_bytes(b"ID3" + b"\0" * 200)
@@ -56,7 +62,7 @@ async def ingesteld(hass: HomeAssistant, nep, tmp_path):
         title="Nep tuner",
         unique_id="127.0.0.1",
         data={"host": "127.0.0.1", "pin": "1234"},
-        options={"pin": "1234", "basis_url": "http://192.168.1.50:8123"},
+        options={"pin": "1234", "basis_url": basis},
     )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -85,7 +91,9 @@ async def test_omroep_herstelt_dab_en_volume(hass: HomeAssistant, ingesteld, nep
     assert antwoord["gespeeld"] == 2 and antwoord["fouten"] == []
     assert antwoord["hersteld"] is True
     assert nep.volume_tijdens_bericht == [32, 32]
-    assert len(nep.gespeeld) == 2 and nep.gespeeld[0].startswith("http://192.168.1.50:8123/api/btx_omroep/bestand/")
+    assert len(nep.gespeeld) == 2 and "/api/btx_omroep/bestand/" in nep.gespeeld[0]
+    assert nep.opgehaald == [200, 200], "tuner moet het bestand echt kunnen ophalen"
+    assert nep.luide_radio is False, "radio mag nooit even op omroepvolume spelen"
     assert nep.gespeeld[0].endswith("/test%20bericht.mp3")
     # radio terug zoals voordien
     assert (nep.mode, nep.zender, nep.status) == (5, "VRT StuBru", 2)
@@ -121,10 +129,12 @@ async def test_bestand_buiten_mediamap_geweigerd(hass: HomeAssistant, ingesteld)
 
 
 async def test_bestand_view(hass: HomeAssistant, ingesteld, hass_client_no_auth, tmp_path) -> None:
+    from custom_components.btx_omroep import Bestand
+
     client = await hass_client_no_auth()
     pad = tmp_path / "omroep" / "test bericht.mp3"
     assert (await client.get("/api/btx_omroep/bestand/geheim/x.mp3")).status == 404
-    hass.data[DOMAIN]["bestanden"]["geheim"] = pad
+    hass.data[DOMAIN]["bestanden"]["geheim"] = Bestand(pad)
     r = await client.head("/api/btx_omroep/bestand/geheim/x.mp3")
     assert r.status == 200
     r = await client.get("/api/btx_omroep/bestand/geheim/x.mp3")
@@ -145,6 +155,15 @@ async def test_bestand_view(hass: HomeAssistant, ingesteld, hass_client_no_auth,
         ("2026-10-07 07:30:00", {"modus": "interval"}, False),
         ("2026-10-07 17:00:00", {"modus": "interval"}, True),
         ("2026-10-07 17:30:00", {"modus": "interval"}, False),
+        ("2026-10-07 12:30:00", {"modus": "tijden", "tijden": "10:00 12:30"}, True),
+        ("2026-10-07 09:05:00", {"modus": "tijden", "tijden": "9:05;10:00"}, True),
+        ("2026-10-07 10:00:00", {"modus": "tijden", "tijden": "10:00:00"}, True),
+        ("2026-10-07 10:00:00", {"modus": "tijden", "tijden": ""}, False),
+        ("2026-10-07 23:00:00", {"modus": "interval", "start": "22:00:00", "einde": "02:00:00"}, True),
+        ("2026-10-08 01:30:00", {"modus": "interval", "start": "22:00:00", "einde": "02:00:00"}, True),
+        ("2026-10-08 02:30:00", {"modus": "interval", "start": "22:00:00", "einde": "02:00:00"}, False),
+        ("2026-10-07 21:30:00", {"modus": "interval", "start": "22:00:00", "einde": "02:00:00"}, False),
+        ("2026-10-07 10:00:00", {"modus": "tijden", "weekdagen": []}, False),
     ],
 )
 async def test_blueprint_planning(hass: HomeAssistant, freezer, tijd, variabelen, verwacht) -> None:
@@ -214,3 +233,70 @@ async def test_lege_tuner_kiest_enige_tuner(hass: HomeAssistant, ingesteld, nep)
         DOMAIN, "omroep", {"tuner": "", "bericht": {"media_content_id": "media-source://media_source/local/omroep/test bericht.mp3"}}, blocking=True
     )
     assert len(nep.gespeeld) == 1
+
+
+
+async def test_onbereikbare_basis_url_geeft_fout(hass: HomeAssistant, ingesteld, nep) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+
+    hass.config_entries.async_update_entry(ingesteld, options={"pin": "1234", "basis_url": "http://127.0.0.1:9"})
+    await hass.async_block_till_done()
+    with pytest.raises(HomeAssistantError, match="haalde het bestand niet op"):
+        await hass.services.async_call(DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3"}, blocking=True)
+    staat = hass.states.get("sensor.nep_tuner_omroep_status")
+    assert staat.state == "fout"
+    assert (nep.mode, nep.status, nep.volume, nep.mute) == (5, 2, 25, 0), "radio moet ook na een fout terug zijn"
+
+
+async def test_herstel_faalt_dan_noodherstel_nooit_gemute(hass: HomeAssistant, ingesteld, nep) -> None:
+    nep.faal_modes = {8}  # omweg via AUX faalt telkens
+    antwoord = await hass.services.async_call(
+        DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3", "volume": 32}, blocking=True, return_response=True
+    )
+    assert antwoord["hersteld"] is False and "herstel mislukt" in antwoord["fouten"]
+    assert nep.mute == 0 and nep.mode == 5 and nep.volume == 25
+    # noodherstel lukte meteen: geen extra pogingen gepland
+    assert not any("noodherstel" in str(t) for t in hass._background_tasks)
+    assert hass.states.get("sensor.nep_tuner_omroep_status").state == "fout"
+
+
+async def test_annuleren_tijdens_bericht_herstelt_toch(hass: HomeAssistant, ingesteld, nep) -> None:
+    import asyncio
+
+    nep.duur = 2
+    taak = hass.async_create_task(
+        hass.services.async_call(DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3", "volume": 32}, blocking=True)
+    )
+    await asyncio.sleep(1.5)
+    assert nep.mode == 4  # bericht speelt
+    taak.cancel()
+    for _ in range(80):
+        await asyncio.sleep(0.25)
+        if hass.states.get("sensor.nep_tuner_omroep_status").state != "bezig":
+            break
+    assert hass.states.get("sensor.nep_tuner_omroep_status").state == "klaar"
+    assert (nep.mode, nep.status, nep.volume, nep.mute) == (5, 2, 25, 0)
+
+
+async def test_twee_berichten_tegelijk_na_elkaar(hass: HomeAssistant, ingesteld, nep) -> None:
+    import asyncio
+
+    oproep = {"bericht": "omroep/test bericht.mp3", "volume": 30}
+    await asyncio.gather(
+        hass.services.async_call(DOMAIN, "omroep", oproep, blocking=True),
+        hass.services.async_call(DOMAIN, "omroep", oproep, blocking=True),
+    )
+    assert len(nep.gespeeld) == 2
+    assert (nep.mode, nep.status, nep.volume, nep.mute) == (5, 2, 25, 0), "tweede bericht mag 'MP, volume 30' niet als oude toestand bewaren"
+
+
+async def test_opties_controleren_pin_en_url(hass: HomeAssistant, ingesteld) -> None:
+    res = await hass.config_entries.options.async_init(ingesteld.entry_id)
+    res = await hass.config_entries.options.async_configure(res["flow_id"], {"pin": "1234", "basis_url": "192.168.1.10"})
+    assert res["errors"] == {"basis_url": "ongeldige_url"}
+    res = await hass.config_entries.options.async_configure(res["flow_id"], {"pin": "9999", "basis_url": ""})
+    assert res["errors"] == {"base": "niet_bereikbaar"}
+    res = await hass.config_entries.options.async_configure(
+        res["flow_id"], {"pin": "1234", "basis_url": "http://192.168.1.10:8123/"}
+    )
+    assert res["type"] == "create_entry" and res["data"]["basis_url"] == "http://192.168.1.10:8123"

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import re
+from html import unescape
 
-from aiohttp import web
+from aiohttp import ClientSession, web
 
 MODES = ["AIRABLE_RADIO", "AIRABLE_PODCASTS", "AIRABLE_AMAZON_MP", "Spotify", "MP", "DAB", "FM", "Bluetooth", "AUXIN"]
 PRESETS = ["VRT StuBru", "VRT MNM", "Qmusic"]
@@ -25,6 +26,10 @@ class NepTuner:
         self.volume_tijdens_bericht: list[int] = []
         self.dab_volume_bij_start = 27  # firmware zet bij DAB start een eigen volume
         self.duur = 1.5
+        self.url = ""
+        self.opgehaald: list[int] = []
+        self.luide_radio = False  # volume omhoog terwijl de radio hoorbaar speelt
+        self.faal_modes: set[int] = set()  # SET mode naar deze keys geeft FS_FAIL
         self._taak: asyncio.Task | None = None
         self.app = web.Application()
         self.app.router.add_get("/fsapi/{op}/{pad:.*}", self.fsapi)
@@ -64,6 +69,8 @@ class NepTuner:
             t, v = waarden[pad]
             return self._ok(f"<value><{t}>{v}</{t}></value>")
         # SET
+        if pad == "netRemote.sys.mode" and int(waarde) in self.faal_modes:
+            return web.Response(text="<fsapiResponse><status>FS_FAIL</status></fsapiResponse>")
         if pad == "netRemote.sys.mode":
             nieuw = int(waarde)
             if MODES[nieuw] == "DAB":
@@ -77,6 +84,8 @@ class NepTuner:
             self.vorige_mode_was_dmr = MODES[nieuw] == "MP"
             self.mode = nieuw
         elif pad == "netRemote.sys.audio.volume":
+            if int(waarde) > self.volume and self.mute == 0 and self.status == 2 and MODES[self.mode] != "MP":
+                self.luide_radio = True
             self.volume = int(waarde)
         elif pad == "netRemote.sys.audio.mute":
             self.mute = int(waarde)
@@ -91,16 +100,31 @@ class NepTuner:
         body = await req.text()
         actie = re.search(r"<u:(\w+)", body).group(1)
         if actie == "SetAVTransportURI":
-            self.gespeeld.append(re.search(r"<CurrentURI>(.*?)</CurrentURI>", body).group(1))
+            self.url = unescape(re.search(r"<CurrentURI>(.*?)</CurrentURI>", body).group(1))
+            self.gespeeld.append(self.url)
             self.mode, self.vorige_mode_was_dmr, self.status = 4, True, 0
         elif actie == "Play":
             self.volume_tijdens_bericht.append(self.volume)
-            self.transport = "PLAYING"
+            self.transport = "TRANSITIONING"
 
-            async def klaar() -> None:
+            async def spelen() -> None:
+                # zoals de echte tuner: HEAD, HEAD, GET; lukt dat niet, dan terug naar STOPPED
+                try:
+                    async with ClientSession() as sessie:
+                        for methode in ("HEAD", "HEAD", "GET"):
+                            async with sessie.request(methode, self.url) as r:
+                                await r.read()
+                                status = r.status
+                        self.opgehaald.append(status)
+                except Exception:  # noqa: BLE001
+                    status = 0
+                if status != 200:
+                    self.transport = "STOPPED"
+                    return
+                self.transport = "PLAYING"
                 await asyncio.sleep(self.duur)
                 self.transport = "STOPPED"
 
-            self._taak = asyncio.create_task(klaar())
+            self._taak = asyncio.create_task(spelen())
         inhoud = f"<CurrentTransportState>{self.transport}</CurrentTransportState>" if actie == "GetTransportInfo" else ""
         return web.Response(text=f"<s:Envelope><s:Body>{inhoud}</s:Body></s:Envelope>")

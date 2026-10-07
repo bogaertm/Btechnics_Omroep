@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -55,9 +56,22 @@ class OmroepOptionsFlow(OptionsFlow):
     """PIN en basis URL aanpassen."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        fouten: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
-        huidig = {**self.config_entry.data, **self.config_entry.options}
+            basis = (user_input.get(CONF_BASIS_URL) or "").strip().rstrip("/")
+            if basis and not re.fullmatch(r"https?://[^/\s]+", basis):
+                fouten[CONF_BASIS_URL] = "ongeldige_url"
+            else:
+                tuner = FrontierOmroep(
+                    async_get_clientsession(self.hass), self.config_entry.data[CONF_HOST], user_input[CONF_PIN]
+                )
+                try:
+                    await tuner.info()
+                except TunerFout:
+                    fouten["base"] = "niet_bereikbaar"
+                else:
+                    return self.async_create_entry(data={**user_input, CONF_BASIS_URL: basis})
+        huidig = {**self.config_entry.data, **self.config_entry.options, **(user_input or {})}
         schema = vol.Schema(
             {
                 vol.Required(CONF_PIN, default=huidig.get(CONF_PIN, DEFAULT_PIN)): str,
@@ -66,4 +80,4 @@ class OmroepOptionsFlow(OptionsFlow):
                 ): str,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="init", data_schema=schema, errors=fouten)

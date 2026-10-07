@@ -18,4 +18,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [ ] Mp3 boodschappen van de klant in `/media/omroep/` zetten en luidheid normaliseren (ongeveer -7 LUFS)
 - [ ] Radiovolume lager en versterker hoger zetten, zodat boodschappen op 32 duidelijk boven de radio uitkomen
 - [ ] Dashboardkaart met knop per boodschap
-- [ ] Beslissen of HACS op de Pi met een account met toegang tot deze privé repo werkt, of manuele installatie
+- [x] HACS kan geen privé repo's gebruiken: manuele installatie op de Pi (zie README)
+- [ ] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (kalender)
+- [ ] DAB zender kiezen vanuit HA (keuzelijst favorieten), plus radio aan/uit en volume als entiteiten
+- [ ] Na de echte installatie: volgorde mute, DLNA bron, volume, Play nakijken op de tuner (gewijzigd na review, nog niet op hardware getest)

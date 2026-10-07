@@ -63,6 +63,7 @@ class Resultaat:
     gevraagd: int = 0
     hersteld: bool = False
     zender_vanzelf: bool | None = None
+    noodherstel: bool | None = None
     fouten: list[str] = field(default_factory=list)
 
     @property
@@ -133,13 +134,20 @@ class FrontierOmroep:
             "versie": await self.get("netRemote.sys.info.version"),
         }
 
+    async def _get_of(self, node: str, standaard: str) -> str:
+        """Lees een waarde, maar val terug op een standaard (sommige nodes antwoorden niet in standby)."""
+        try:
+            return await self.get(node)
+        except TunerFout:
+            return standaard
+
     async def toestand(self) -> Toestand:
         return Toestand(
             power=await self.get("netRemote.sys.power"),
             mode=await self.get("netRemote.sys.mode"),
             volume=await self.get("netRemote.sys.audio.volume"),
-            mute=await self.get("netRemote.sys.audio.mute"),
-            zender=await self.get("netRemote.play.info.name"),
+            mute=await self._get_of("netRemote.sys.audio.mute", "0"),
+            zender=await self._get_of("netRemote.play.info.name", ""),
         )
 
     async def max_volume(self) -> int:
@@ -182,19 +190,34 @@ class FrontierOmroep:
         m = re.search(r"<CurrentTransportState>(.*?)<", tekst)
         return m.group(1) if m else ""
 
-    async def speel_url(self, url: str, max_duur: float = 600) -> bool:
-        """Speel een bestand af en wacht tot het gedaan is."""
+    async def speel_url(self, url: str, volume: int | None = None, max_duur: float = 600) -> bool:
+        """Speel een bestand af en wacht tot het gedaan is.
+
+        Volgorde: gemute naar de DLNA bron (SetAVTransportURI), dan pas volume
+        en mute eraf, dan Play. Zo klinkt de radio nooit even op omroepvolume.
+        """
+        await self.set("netRemote.sys.audio.mute", 1)
         await self._soap(
             "SetAVTransportURI", {"InstanceID": 0, "CurrentURI": escape(url), "CurrentURIMetaData": ""}
         )
+        await asyncio.sleep(0.5)
+        if volume is not None:
+            await self.set("netRemote.sys.audio.volume", volume)
+        await self.set("netRemote.sys.audio.mute", 0)
         await self._soap("Play", {"InstanceID": 0, "Speed": 1})
         start = time.monotonic()
         speelde = False
+        volume_gecontroleerd = volume is None
         while time.monotonic() - start < max_duur:
             await asyncio.sleep(0.25)
             status = await self.transport_status()
             if status in ("PLAYING", "TRANSITIONING"):
                 speelde = True
+                if status == "PLAYING" and not volume_gecontroleerd:
+                    # voor het geval de DLNA bron bij het starten een eigen volume zet
+                    volume_gecontroleerd = True
+                    if await self._get_of("netRemote.sys.audio.volume", str(volume)) != str(volume):
+                        await self.set("netRemote.sys.audio.volume", volume)
             elif speelde and status in ("STOPPED", "NO_MEDIA_PRESENT"):
                 await asyncio.sleep(1)  # renderer even laten afronden voor een volgende opdracht
                 return True
@@ -225,10 +248,19 @@ class FrontierOmroep:
                 continue
         return False
 
+    async def _zet_volume_en_controleer(self, volume: str) -> bool:
+        for _ in range(6):
+            await self.set("netRemote.sys.audio.volume", volume)
+            await asyncio.sleep(0.5)
+            if await self.get("netRemote.sys.audio.volume") == volume:
+                return True
+        return False
+
     async def herstel(self, oud: Toestand, resultaat: Resultaat) -> None:
         bronnen = await self.bronnen()
         key_naar_id = {v: k for k, v in bronnen.items()}
         stil = next((bronnen[i] for i in STILLE_BRON_IDS if i in bronnen), None)
+        is_radio = key_naar_id.get(oud.mode) in RADIO_BRON_IDS
 
         await self.set("netRemote.sys.audio.mute", 1)
         if stil is not None and stil != oud.mode:
@@ -236,9 +268,10 @@ class FrontierOmroep:
             await asyncio.sleep(1.5)
         await self.set("netRemote.sys.mode", oud.mode)
 
-        if oud.power == "1" and key_naar_id.get(oud.mode) in RADIO_BRON_IDS and oud.zender.strip():
+        if oud.power == "1" and is_radio:
+            # ook zonder zendernaam wachten tot de radio speelt: pas dan zet de tuner zijn eigen volume
             resultaat.zender_vanzelf = await self._wacht_op_zender(oud.zender, 8)
-            if not resultaat.zender_vanzelf:
+            if not resultaat.zender_vanzelf and oud.zender.strip():
                 if await self._kies_favoriet(oud.zender):
                     await self._wacht_op_zender(oud.zender, 8)
                 else:
@@ -247,37 +280,58 @@ class FrontierOmroep:
             await asyncio.sleep(2)
 
         # volume pas nu terugzetten: de tuner overschrijft het bij het opstarten van de bron
-        for _ in range(6):
-            await self.set("netRemote.sys.audio.volume", oud.volume)
-            await asyncio.sleep(0.5)
-            if await self.get("netRemote.sys.audio.volume") == oud.volume:
-                break
-        else:
+        if not await self._zet_volume_en_controleer(oud.volume):
             resultaat.fouten.append("volume niet correct hersteld")
+        await asyncio.sleep(2)
+        if await self._get_of("netRemote.sys.audio.volume", oud.volume) != oud.volume:
+            await self._zet_volume_en_controleer(oud.volume)
 
         await self.set("netRemote.sys.audio.mute", oud.mute or 0)
         if oud.power == "0":
             await self.set("netRemote.sys.power", 0)
         resultaat.hersteld = True
 
+    async def noodherstel(self, oud: Toestand) -> bool:
+        """Minimaal herstel als het gewone herstel faalde: nooit gemute of op DLNA laten staan."""
+        gelukt = True
+        for node, waarde in (
+            ("netRemote.sys.mode", oud.mode),
+            ("netRemote.sys.audio.volume", oud.volume),
+            ("netRemote.sys.audio.mute", oud.mute or 0),
+        ):
+            try:
+                await self.set(node, waarde)
+            except Exception:  # noqa: BLE001 - elk onderdeel apart proberen
+                gelukt = False
+        if oud.power == "0":
+            try:
+                await self.set("netRemote.sys.power", 0)
+            except Exception:  # noqa: BLE001
+                gelukt = False
+        return gelukt
+
     # ------------------------------------------------------------ omroep
     async def omroep(
         self, url: str, volume: int | None = None, herhalingen: int = 1, pauze: float = 1.0
-    ) -> Resultaat:
-        """Speel een bericht af en herstel daarna de vorige toestand."""
+    ) -> tuple[Resultaat, Toestand]:
+        """Speel een bericht af en herstel daarna de vorige toestand.
+
+        Geeft ook de bewaarde toestand terug, zodat de oproeper later nog een
+        noodherstel kan plannen als het herstel niet lukte.
+        """
         resultaat = Resultaat(gevraagd=max(1, int(herhalingen)))
         oud = await self.toestand()
         _LOGGER.debug("Toestand voor bericht: %s", oud)
         try:
+            await self.set("netRemote.sys.audio.mute", 1)
             if oud.power != "1":
                 await self.set("netRemote.sys.power", 1)
                 await asyncio.sleep(2)
+            doelvolume = None
             if volume is not None:
-                vmax = await self.max_volume()
-                await self.set("netRemote.sys.audio.volume", max(0, min(int(volume), vmax)))
-            await self.set("netRemote.sys.audio.mute", 0)
+                doelvolume = max(0, min(int(volume), await self.max_volume()))
             for keer in range(resultaat.gevraagd):
-                if await self.speel_url(url):
+                if await self.speel_url(url, doelvolume):
                     resultaat.gespeeld += 1
                 if keer < resultaat.gevraagd - 1 and pauze > 0:
                     await asyncio.sleep(pauze)
@@ -285,14 +339,15 @@ class FrontierOmroep:
             resultaat.fouten.append(str(err))
             _LOGGER.warning("Omroep onderbroken: %s", err)
         finally:
-            # herstel altijd, ook na een fout, zodat het nooit stil blijft
+            # herstel altijd, ook na een fout of annulering, zodat het nooit stil blijft
             for poging in range(3):
                 try:
                     await self.herstel(oud, resultaat)
                     break
-                except TunerFout as err:
+                except Exception as err:  # noqa: BLE001
                     _LOGGER.warning("Herstel poging %s mislukt: %s", poging + 1, err)
                     await asyncio.sleep(2)
             else:
                 resultaat.fouten.append("herstel mislukt")
-        return resultaat
+                resultaat.noodherstel = await self.noodherstel(oud)
+        return resultaat, oud
