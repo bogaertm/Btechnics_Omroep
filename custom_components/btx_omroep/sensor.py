@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import OmroepConfigEntry
 from .const import DOMAIN, SIGNAAL_STATUS
@@ -20,7 +21,9 @@ STATUSSEN = ["klaar", "bezig", "fout"]
 async def async_setup_entry(
     hass: HomeAssistant, entry: OmroepConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    async_add_entities([OmroepStatus(entry), SpeeltNu(entry.runtime_data.coordinator, entry, "speelt_nu")])
+    async_add_entities(
+        [OmroepStatus(entry), SpeeltNu(entry.runtime_data.coordinator, entry, "speelt_nu"), Geschiedenis(entry)]
+    )
 
 
 class OmroepStatus(SensorEntity):
@@ -95,3 +98,34 @@ class SpeeltNu(OmroepEntiteit, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         data = self.coordinator.data or {}
         return {"bron": self._bron(), "volume": data.get("volume")}
+
+
+
+class Geschiedenis(SensorEntity):
+    """Aantal boodschappen vandaag; de laatste 50 staan in het attribuut 'items'."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "geschiedenis"
+    _attr_should_poll = False
+    _attr_icon = "mdi:history"
+    _attr_native_unit_of_measurement = "vandaag"
+    _unrecorded_attributes = frozenset({"items"})
+
+    def __init__(self, entry: OmroepConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_geschiedenis"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAAL_STATUS.format(self._entry.entry_id), self.async_write_ha_state)
+        )
+
+    @property
+    def native_value(self) -> int:
+        vandaag = dt_util.now().date().isoformat()
+        return sum(1 for i in self._entry.runtime_data.geschiedenis if i["tijd"].startswith(vandaag))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"items": self._entry.runtime_data.geschiedenis[:50]}

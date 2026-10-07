@@ -48,6 +48,9 @@
       },
       "speelt_nu": {
         "name": "Speelt nu"
+      },
+      "geschiedenis": {
+        "name": "Geschiedenis omroep"
       }
     },
     "switch": {

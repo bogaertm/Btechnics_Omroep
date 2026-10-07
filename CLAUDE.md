@@ -30,4 +30,8 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (blueprint radio_planning.yaml)
 - [x] DAB zender kiezen vanuit HA (keuzelijst favorieten), plus radio aan/uit en volume als entiteiten
 - [x] Volgorde mute, DLNA bron, volume, Play werkt op de tuner (getest 7/10/2026)
+- [ ] Dubbel drukken op Opslaan (iPhone, iPad en desktop): opslaan bij Gereed/Return in naamveld + bevestiging
+- [ ] Geschiedenis van alle afgespeelde boodschappen (tijd, boodschap, wie, resultaat)
+- [ ] Tabblad Uitleg op het dashboard
+- [ ] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet

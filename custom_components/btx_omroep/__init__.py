@@ -25,6 +25,7 @@ from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, Se
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 
@@ -82,6 +83,8 @@ class OmroepData:
     status: str = "klaar"
     attributen: dict[str, Any] = field(default_factory=dict)
     # instellingen van de dashboardknoppen (bewaard door de entiteiten zelf)
+    geschiedenis: list[dict[str, Any]] = field(default_factory=list)
+    store: Store | None = None
     instellingen: dict[str, Any] = field(
         default_factory=lambda: {"muziekje": True, "volume": 32, "herhalingen": 1, "tekst": "", "naam": "", "boodschap": None}
     )
@@ -122,7 +125,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmroepConfigEntry) -> bo
     except ConfigEntryNotReady:
         await sessie.close()
         raise
-    entry.runtime_data = OmroepData(tuner=tuner, sessie=sessie, lock=lock, coordinator=coordinator)
+    store = Store(hass, 1, f"{DOMAIN}.geschiedenis.{entry.entry_id}")
+    entry.runtime_data = OmroepData(
+        tuner=tuner, sessie=sessie, lock=lock, coordinator=coordinator,
+        store=store, geschiedenis=(await store.async_load()) or [],
+    )
     await hass.async_add_executor_job(_maak_omroepmap, hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_opties_gewijzigd))
@@ -242,6 +249,22 @@ async def bewaar_tekst_als_boodschap(hass: HomeAssistant, entry: OmroepConfigEnt
     await hass.async_add_executor_job(_schrijf)
     _LOGGER.info("Boodschap %s opgeslagen", bestand)
     return bestand.name
+
+
+async def bewaar_en_meld(hass: HomeAssistant, entry: OmroepConfigEntry) -> str:
+    """Bewaar de omroeptekst onder de ingevulde naam, toon bevestiging en maak het naamveld leeg."""
+    inst = entry.runtime_data.instellingen
+    try:
+        naam = await bewaar_tekst_als_boodschap(hass, entry, inst.get("tekst") or "", inst.get("naam") or "")
+    except HomeAssistantError as err:
+        _zet_status(hass, entry, entry.runtime_data.status, opgeslagen=None, opslaan_fout=str(err))
+        raise
+    inst["boodschap"] = naam
+    inst["naam"] = ""
+    _zet_status(hass, entry, entry.runtime_data.status, opgeslagen=naam,
+                opgeslagen_om=dt_util.now().isoformat(), opslaan_fout=None)
+    hass.bus.async_fire(f"{DOMAIN}_boodschappen_gewijzigd", {"naam": naam})
+    return naam
 
 
 def _media_mappen(hass: HomeAssistant) -> dict[str, Path]:
@@ -385,8 +408,21 @@ async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceRes
 
     # in een eigen taak en afgeschermd: wordt de automatisering geannuleerd (herladen,
     # bewerken), dan loopt het bericht en vooral het herstel van de radio toch verder
+    wie = await _wie(hass, call)
     taak = hass.async_create_background_task(_bericht(), f"btx_omroep {naam}")
     resultaat, _ = await asyncio.shield(taak)
+    _schrijf_geschiedenis(
+        hass,
+        entry,
+        {
+            "tijd": dt_util.now().isoformat(timespec="seconds"),
+            "bericht": naam,
+            "wie": wie,
+            "keer": f"{resultaat.gespeeld}/{resultaat.gevraagd}",
+            "ok": resultaat.ok,
+            "fout": "; ".join(resultaat.fouten)[:120] if resultaat.fouten else "",
+        },
+    )
 
     if not resultaat.ok:
         _LOGGER.warning("Omroep %s niet volledig gelukt: %s", naam, resultaat.fouten)
@@ -402,6 +438,26 @@ async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceRes
             "fouten": resultaat.fouten,
         }
     return None
+
+
+GESCHIEDENIS_MAX = 200
+
+
+async def _wie(hass: HomeAssistant, call: ServiceCall) -> str:
+    """Naam van wie de boodschap startte, of 'Planning' voor een automatisering."""
+    ctx = call.context
+    if ctx.user_id and (gebruiker := await hass.auth.async_get_user(ctx.user_id)):
+        return gebruiker.name or "Gebruiker"
+    return "Planning" if ctx.parent_id else "Systeem"
+
+
+def _schrijf_geschiedenis(hass: HomeAssistant, entry: OmroepConfigEntry, item: dict[str, Any]) -> None:
+    data = entry.runtime_data
+    data.geschiedenis.insert(0, item)
+    del data.geschiedenis[GESCHIEDENIS_MAX:]
+    if data.store is not None:
+        data.store.async_delay_save(lambda: data.geschiedenis, 5)
+    async_dispatcher_send(hass, SIGNAAL_STATUS.format(entry.entry_id))
 
 
 def _plan_noodherstel(hass: HomeAssistant, data: OmroepData, oud: Toestand) -> None:

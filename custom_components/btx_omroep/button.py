@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import OmroepConfigEntry, bewaar_tekst_als_boodschap
+from . import OmroepConfigEntry, bewaar_en_meld
 from .const import DOMAIN, MAP_OMROEP, SERVICE_OMROEP
 from .entiteit import OmroepEntiteit
 
@@ -73,9 +73,4 @@ class TekstOpslaan(_OmroepKnop):
     _attr_icon = "mdi:content-save"
 
     async def async_press(self) -> None:
-        naam = await bewaar_tekst_als_boodschap(
-            self.hass, self._entry, self._inst.get("tekst") or "", self._inst.get("naam") or ""
-        )
-        # meteen selecteren, zodat hij klaar staat om af te spelen of in te plannen
-        self._inst["boodschap"] = naam
-        self.hass.bus.async_fire(f"{DOMAIN}_boodschappen_gewijzigd", {"naam": naam})
+        await bewaar_en_meld(self.hass, self._entry)
