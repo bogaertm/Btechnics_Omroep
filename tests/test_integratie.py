@@ -564,3 +564,16 @@ async def test_muziekje_schakelaar_en_instellingen_bestaan(hass: HomeAssistant, 
         "text.nep_tuner_naam_boodschap",
     ):
         assert hass.states.get(eid) is not None, eid
+
+
+
+async def test_standaard_stem_in_taal_van_ha(hass: HomeAssistant) -> None:
+    from custom_components.btx_omroep import _standaard_tts
+
+    hass.config.language = "nl"
+    hass.states.async_set("tts.google_translate_en_com", "unknown")
+    hass.states.async_set("tts.google_translate_nl_be", "unknown")
+    hass.states.async_set("tts.piper", "unknown")
+    assert _standaard_tts(hass) == "tts.google_translate_nl_be"
+    hass.config.language = "en"
+    assert _standaard_tts(hass) == "tts.google_translate_en_com"

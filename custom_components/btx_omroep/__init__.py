@@ -179,8 +179,15 @@ def boodschappen(hass: HomeAssistant) -> list[str]:
 
 
 def _standaard_tts(hass: HomeAssistant) -> str | None:
+    """Kies een stem: eerst in de taal van Home Assistant, bij voorkeur Google Translate."""
     tts = sorted(hass.states.async_entity_ids("tts"))
-    return next((t for t in tts if "google_translate" in t), tts[0] if tts else None)
+    taal = (hass.config.language or "nl").split("-")[0].lower()
+
+    def score(eid: str) -> tuple[int, int]:
+        delen = eid.split(".", 1)[1].split("_")
+        return (0 if taal in delen else 1, 0 if "google_translate" in eid else 1)
+
+    return min(tts, key=score) if tts else None
 
 
 async def _tts_url(hass: HomeAssistant, entry: OmroepConfigEntry, tekst: str, basis: str) -> str:
