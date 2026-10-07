@@ -18,15 +18,16 @@ Berichten wachten op elkaar (wachtrij per tuner). Ook na een fout wordt de radio
 
 ## Installatie
 
-**Manueel (zolang de repository privé is)**
-HACS kan geen privé repositories gebruiken
-([HACS FAQ](https://hacs.xyz/docs/faq/private_repositories/)).
-1. Kopieer de map `custom_components/btx_omroep` naar `/config/custom_components/` (bv. via de Samba of File editor add-on)
-2. Kopieer `blueprints/automation/btx_omroep/` naar `/config/blueprints/automation/`
-3. Herstart Home Assistant
+**Via HACS**
+1. HACS → menu rechtsboven → **Aangepaste repositories**
+2. URL `https://github.com/bogaertm/Btechnics_Omroep`, type **Integratie**
+3. **Btechnics Omroep** installeren en Home Assistant herstarten
+4. Blueprints importeren: Instellingen → Automatiseringen → Blueprints → **Blueprint importeren** met
+   `https://github.com/bogaertm/Btechnics_Omroep/blob/main/blueprints/automation/btx_omroep/omroep_planning.yaml`
+   en `https://github.com/bogaertm/Btechnics_Omroep/blob/main/blueprints/automation/btx_omroep/radio_planning.yaml`
 
-**Via HACS** (enkel als de repository publiek wordt): HACS → Aangepaste repositories →
-`https://github.com/bogaertm/Btechnics_Omroep`, type Integratie.
+**Manueel**: kopieer `custom_components/btx_omroep` naar `/config/custom_components/` en
+`blueprints/automation/btx_omroep/` naar `/config/blueprints/automation/`, en herstart Home Assistant.
 
 **Tuner toevoegen**
 1. Geef de tuner een vast IP adres in de router

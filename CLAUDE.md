@@ -21,7 +21,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [ ] Radiovolume lager en versterker hoger zetten, zodat boodschappen op 32 duidelijk boven de radio uitkomen
 - [ ] Dashboardkaart met knop per boodschap, zenderkeuze, aan/uit en volume
 - [ ] Op de Pi: Schema helper (openingsuren), Holiday (België) en lokale kalender Sluitingen aanmaken
-- [x] HACS kan geen privé repo's gebruiken: manuele installatie op de Pi (zie README)
+- [x] Repo publiek: installatie op de Pi via HACS (aangepaste repository), blueprints importeren via URL
 - [x] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (blueprint radio_planning.yaml)
 - [x] DAB zender kiezen vanuit HA (keuzelijst favorieten), plus radio aan/uit en volume als entiteiten
 - [ ] Na de echte installatie: volgorde mute, DLNA bron, volume, Play nakijken op de tuner (gewijzigd na review, nog niet op hardware getest)
