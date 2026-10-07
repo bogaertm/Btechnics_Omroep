@@ -1,0 +1,119 @@
+blueprint:
+  name: Radio aan/uit planning (Btechnics)
+  description: >-
+    Zet de radio aan en uit volgens een weekplanning (Schema helper).
+    Op feestdagen en tijdens sluitingen (kalenders) blijft de radio uit.
+    Bij het aanzetten kan een vaste DAB zender en een vast volume gekozen worden.
+    Schakelt enkel bij een wijziging in planning of kalender: wie tussendoor
+    manueel schakelt, wordt niet meteen overruled.
+  domain: automation
+  input:
+    radio:
+      name: Radio schakelaar
+      selector:
+        entity:
+          filter:
+            - integration: btx_omroep
+              domain: switch
+    schema:
+      name: Weekplanning
+      description: Schema helper (Instellingen → Apparaten & diensten → Helpers → Schema) met de openingsuren.
+      selector:
+        entity:
+          filter:
+            - domain: schedule
+    stil_kalenders:
+      name: Feestdagen en sluitingen
+      description: >-
+        Kalenders waarop de radio uit blijft zolang er een afspraak loopt, bv. de
+        Holiday integratie (feestdagen België) en een lokale kalender "Sluitingen".
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: calendar
+    zender_entiteit:
+      name: DAB zender keuzelijst (optioneel)
+      default: ""
+      selector:
+        entity:
+          filter:
+            - integration: btx_omroep
+              domain: select
+    zender:
+      name: Zender bij aanzetten (optioneel)
+      description: Zoals in de keuzelijst, bv. "1. VRT StuBru". Leeg = laatste zender.
+      default: ""
+      selector:
+        text: {}
+    volume_entiteit:
+      name: Volume (optioneel)
+      default: ""
+      selector:
+        entity:
+          filter:
+            - integration: btx_omroep
+              domain: number
+    volume:
+      name: Volume bij aanzetten
+      description: "-1 = volume niet aanpassen"
+      default: -1
+      selector:
+        number: {min: -1, max: 32, mode: slider}
+
+mode: restart
+
+variables:
+  radio: !input radio
+  schema: !input schema
+  stil_kalenders: !input stil_kalenders
+  zender_entiteit: !input zender_entiteit
+  zender: !input zender
+  volume_entiteit: !input volume_entiteit
+  volume: !input volume
+  gewenst_aan: >-
+    {{ is_state(schema, 'on')
+       and (stil_kalenders | select('is_state', 'on') | list | count) == 0 }}
+
+triggers:
+  - trigger: state
+    entity_id: !input schema
+    to: ["on", "off"]
+  - trigger: state
+    entity_id: !input stil_kalenders
+    to: ["on", "off"]
+  - trigger: homeassistant
+    event: start
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ gewenst_aan }}"
+    then:
+      - action: switch.turn_on
+        target:
+          entity_id: "{{ radio }}"
+      - if:
+          - condition: template
+            value_template: "{{ zender_entiteit != '' and zender | trim != '' }}"
+        then:
+          - delay: 5
+          - action: select.select_option
+            target:
+              entity_id: "{{ zender_entiteit }}"
+            data:
+              option: "{{ zender | trim }}"
+      - if:
+          - condition: template
+            value_template: "{{ volume_entiteit != '' and volume | int(-1) >= 0 }}"
+        then:
+          - action: number.set_value
+            target:
+              entity_id: "{{ volume_entiteit }}"
+            data:
+              value: "{{ volume | int }}"
+    else:
+      - action: switch.turn_off
+        target:
+          entity_id: "{{ radio }}"

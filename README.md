@@ -52,7 +52,36 @@ data:
 `blueprints/automation/btx_omroep/omroep_planning.yaml` en maak per boodschap een
 automatisering: vaste uren of elke X minuten, weekdagen, volume, aantal keer en pauze.
 
-**Statussensor:** `sensor.<tuner>_omroep_status` (klaar, bezig, fout) met het laatste resultaat als attributen.
+## Bediening
+
+| Entiteit | Functie |
+|---|---|
+| `switch.<tuner>_radio` | Radio aan/uit |
+| `select.<tuner>_dab_zender` | DAB zender kiezen uit de favorieten van de tuner (bv. `1. VRT StuBru`) |
+| `number.<tuner>_volume` | Volume (0 tot 32) |
+| `sensor.<tuner>_omroep_status` | Klaar, bezig of fout, met het laatste resultaat |
+
+Zender, aan/uit en volume wachten tot een lopend omroepbericht klaar is.
+De keuzelijst toont de favorieten zoals ze op de tuner staan; nieuwe favorieten
+verschijnen binnen 10 minuten zodra de tuner op DAB staat.
+
+## Automatisch aan en uit
+
+Blueprint `radio_planning.yaml`. Benodigd (allemaal standaard in Home Assistant):
+
+| Onderdeel | Waar |
+|---|---|
+| Weekplanning | Instellingen → Apparaten & diensten → Helpers → **Schema** (openingsuren per dag) |
+| Feestdagen | Integratie **Holiday**, land België |
+| Sluitingen | Integratie **Lokale kalender**, bv. "Sluitingen"; sluitingsdagen als afspraak toevoegen |
+
+De radio gaat aan bij het begin van een blok in de weekplanning en uit op het einde,
+behalve op een feestdag of tijdens een sluiting. Bij het aanzetten kan een vaste zender
+en volume gekozen worden. Er wordt enkel geschakeld bij een wijziging in planning of kalender,
+dus wie tussendoor manueel schakelt wordt niet meteen overruled.
+
+De blueprint voor boodschappen heeft dezelfde optie om niet te spelen tijdens feestdagen en sluitingen.
+
 
 ## Netwerk
 

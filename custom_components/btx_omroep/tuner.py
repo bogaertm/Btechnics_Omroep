@@ -310,6 +310,57 @@ class FrontierOmroep:
                 gelukt = False
         return gelukt
 
+    # ------------------------------------------------------- bediening
+    async def momentopname(self) -> dict[str, Any]:
+        """Huidige toestand voor de entiteiten in HA."""
+        return {
+            "power": await self.get("netRemote.sys.power") == "1",
+            "mode": await self.get("netRemote.sys.mode"),
+            "volume": int(await self._get_of("netRemote.sys.audio.volume", "0") or 0),
+            "zender": (await self._get_of("netRemote.play.info.name", "")).strip(),
+        }
+
+    async def dab_key(self) -> str | None:
+        return (await self.bronnen()).get("DAB")
+
+    async def dab_favorieten(self) -> list[dict[str, str]]:
+        """Favorieten van DAB. Enkel betrouwbaar als de tuner op DAB staat."""
+        await self.set("netRemote.nav.state", 1)
+        return [
+            {"key": f["key"], "naam": f.get("name", "").strip()}
+            for f in await self._lijst("netRemote.nav.presets")
+            if f.get("name", "").strip()
+        ]
+
+    async def zet_power(self, aan: bool) -> None:
+        await self.set("netRemote.sys.power", 1 if aan else 0)
+
+    async def zet_volume(self, volume: int) -> None:
+        await self.set("netRemote.sys.audio.volume", max(0, min(int(volume), await self.max_volume())))
+
+    async def kies_dab_favoriet(self, key: str) -> None:
+        """Zet de tuner aan, schakel naar DAB en kies een favoriet."""
+        dab = await self.dab_key()
+        if dab is None:
+            raise TunerFout("tuner heeft geen DAB")
+        if await self.get("netRemote.sys.power") != "1":
+            await self.zet_power(True)
+            await asyncio.sleep(2)
+        mode = await self.get("netRemote.sys.mode")
+        if mode != dab:
+            bronnen = await self.bronnen()
+            if mode == bronnen.get("MP"):
+                # na DLNA start DAB niet rechtstreeks: eerst langs een stille bron
+                stil = next((bronnen[i] for i in STILLE_BRON_IDS if i in bronnen), None)
+                if stil is not None:
+                    await self.set("netRemote.sys.mode", stil)
+                    await asyncio.sleep(1.5)
+            await self.set("netRemote.sys.mode", dab)
+            await asyncio.sleep(2)
+        await self.set("netRemote.nav.state", 1)
+        await asyncio.sleep(0.5)
+        await self.set("netRemote.nav.action.selectPreset", key)
+
     # ------------------------------------------------------------ omroep
     async def omroep(
         self, url: str, volume: int | None = None, herhalingen: int = 1, pauze: float = 1.0

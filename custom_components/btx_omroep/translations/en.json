@@ -45,6 +45,21 @@
           "fout": "Fout"
         }
       }
+    },
+    "switch": {
+      "radio": {
+        "name": "Radio"
+      }
+    },
+    "select": {
+      "zender": {
+        "name": "DAB zender"
+      }
+    },
+    "number": {
+      "volume": {
+        "name": "Volume"
+      }
     }
   },
   "services": {

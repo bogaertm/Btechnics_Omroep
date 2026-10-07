@@ -164,6 +164,8 @@ async def test_bestand_view(hass: HomeAssistant, ingesteld, hass_client_no_auth,
         ("2026-10-08 02:30:00", {"modus": "interval", "start": "22:00:00", "einde": "02:00:00"}, False),
         ("2026-10-07 21:30:00", {"modus": "interval", "start": "22:00:00", "einde": "02:00:00"}, False),
         ("2026-10-07 10:00:00", {"modus": "tijden", "weekdagen": []}, False),
+        ("2026-10-07 10:00:00", {"modus": "tijden", "stil_kalenders": ["calendar.sluitingen"]}, False),
+        ("2026-10-07 10:00:00", {"modus": "tijden", "stil_kalenders": ["calendar.leeg"]}, True),
     ],
 )
 async def test_blueprint_planning(hass: HomeAssistant, freezer, tijd, variabelen, verwacht) -> None:
@@ -177,7 +179,10 @@ async def test_blueprint_planning(hass: HomeAssistant, freezer, tijd, variabelen
         "start": "08:00:00",
         "einde": "17:00:00",
         "tijden": "10:00",
+        "stil_kalenders": [],
     }
+    hass.states.async_set("calendar.sluitingen", "on")
+    hass.states.async_set("calendar.leeg", "off")
     uitkomst = Template(tekst, hass).async_render({**standaard, **variabelen})
     assert uitkomst is verwacht
 
@@ -300,3 +305,167 @@ async def test_opties_controleren_pin_en_url(hass: HomeAssistant, ingesteld) -> 
         res["flow_id"], {"pin": "1234", "basis_url": "http://192.168.1.10:8123/"}
     )
     assert res["type"] == "create_entry" and res["data"]["basis_url"] == "http://192.168.1.10:8123"
+
+
+
+# ------------------------------------------------------------ bediening
+async def test_entiteiten_en_bediening(hass: HomeAssistant, ingesteld, nep) -> None:
+    assert hass.states.get("switch.nep_tuner_radio").state == "on"
+    zender = hass.states.get("select.nep_tuner_dab_zender")
+    assert zender.attributes["options"] == ["1. VRT StuBru", "2. VRT MNM", "3. Qmusic"]
+    assert zender.state == "1. VRT StuBru"
+    volume = hass.states.get("number.nep_tuner_volume")
+    assert float(volume.state) == 25 and volume.attributes["max"] == 32
+
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": "select.nep_tuner_dab_zender", "option": "3. Qmusic"}, blocking=True
+    )
+    assert (nep.mode, nep.zender, nep.status) == (5, "Qmusic", 2)
+    await hass.async_block_till_done()
+    assert hass.states.get("select.nep_tuner_dab_zender").state == "3. Qmusic"
+
+    await hass.services.async_call("number", "set_value", {"entity_id": "number.nep_tuner_volume", "value": 18}, blocking=True)
+    assert nep.volume == 18
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.nep_tuner_radio"}, blocking=True)
+    assert nep.power == 0
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.nep_tuner_radio").state == "off"
+    await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.nep_tuner_radio"}, blocking=True)
+    assert nep.power == 1
+
+
+async def test_zender_kiezen_vanuit_dlna_stand(hass: HomeAssistant, ingesteld, nep) -> None:
+    nep.mode, nep.vorige_mode_was_dmr, nep.status, nep.zender = 4, True, 0, ""
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": "select.nep_tuner_dab_zender", "option": "2. VRT MNM"}, blocking=True
+    )
+    assert (nep.mode, nep.zender, nep.status) == (5, "VRT MNM", 2)
+
+
+async def test_volume_tijdens_bericht_wacht_op_herstel(hass: HomeAssistant, ingesteld, nep) -> None:
+    import asyncio
+
+    bericht = hass.async_create_task(
+        hass.services.async_call(DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3", "volume": 32}, blocking=True)
+    )
+    await asyncio.sleep(1)
+    await hass.services.async_call("number", "set_value", {"entity_id": "number.nep_tuner_volume", "value": 12}, blocking=True)
+    await bericht
+    assert nep.volume_tijdens_bericht == [32]
+    assert nep.volume == 12, "volumewijziging tijdens een bericht moet na het herstel toegepast worden"
+
+
+# ------------------------------------------------------------ radio planning
+@pytest.fixture
+async def radio_planning(hass: HomeAssistant):
+    import shutil
+
+    from homeassistant.setup import async_setup_component
+    from pytest_homeassistant_custom_component.common import async_mock_service
+
+    doel = Path(hass.config.path("blueprints/automation/btx_omroep"))
+    doel.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "blueprints/automation/btx_omroep/radio_planning.yaml", doel)
+    oproepen = {
+        "aan": async_mock_service(hass, "switch", "turn_on"),
+        "uit": async_mock_service(hass, "switch", "turn_off"),
+        "zender": async_mock_service(hass, "select", "select_option"),
+        "volume": async_mock_service(hass, "number", "set_value"),
+    }
+    hass.states.async_set("schedule.open", "off")
+    hass.states.async_set("calendar.feestdagen", "off")
+    hass.states.async_set("calendar.sluitingen", "off")
+    assert await async_setup_component(
+        hass,
+        "automation",
+        {
+            "automation": {
+                "id": "radio",
+                "use_blueprint": {
+                    "path": "btx_omroep/radio_planning.yaml",
+                    "input": {
+                        "radio": "switch.nep_tuner_radio",
+                        "schema": "schedule.open",
+                        "stil_kalenders": ["calendar.feestdagen", "calendar.sluitingen"],
+                        "zender_entiteit": "select.nep_tuner_dab_zender",
+                        "zender": "1. VRT StuBru",
+                        "volume_entiteit": "number.nep_tuner_volume",
+                        "volume": 20,
+                    },
+                },
+            }
+        },
+    )
+    await hass.async_block_till_done()
+    return oproepen
+
+
+async def test_radio_planning_aan_en_uit(hass: HomeAssistant, radio_planning, freezer) -> None:
+    from datetime import timedelta
+
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    import asyncio
+
+    o = radio_planning
+
+    async def laat_lopen() -> None:
+        # het script wacht even voor de zender gekozen wordt: tijd vooruit zetten
+        for _ in range(3):
+            await asyncio.sleep(0)
+        freezer.tick(timedelta(seconds=10))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    hass.states.async_set("schedule.open", "on")
+    await laat_lopen()
+    assert len(o["aan"]) == 1 and o["aan"][0].data["entity_id"] == ["switch.nep_tuner_radio"]
+    assert o["zender"][-1].data["option"] == "1. VRT StuBru"
+    assert o["volume"][-1].data["value"] == 20
+
+    hass.states.async_set("calendar.sluitingen", "on")  # sluiting begint
+    await hass.async_block_till_done()
+    assert len(o["uit"]) == 1
+
+    hass.states.async_set("calendar.sluitingen", "off")  # sluiting voorbij, nog binnen openingsuren
+    await laat_lopen()
+    assert len(o["aan"]) == 2
+
+    hass.states.async_set("schedule.open", "off")
+    await hass.async_block_till_done()
+    assert len(o["uit"]) == 2
+
+
+async def test_radio_planning_feestdag_blijft_uit(hass: HomeAssistant, radio_planning) -> None:
+    o = radio_planning
+    hass.states.async_set("calendar.feestdagen", "on")
+    await hass.async_block_till_done()
+    hass.states.async_set("schedule.open", "on")  # openingsuur op een feestdag
+    await hass.async_block_till_done()
+    assert len(o["aan"]) == 0 and len(o["uit"]) == 2
+
+
+async def test_radio_planning_zonder_kalenders(hass: HomeAssistant, caplog) -> None:
+    import shutil
+
+    from homeassistant.setup import async_setup_component
+    from pytest_homeassistant_custom_component.common import async_mock_service
+
+    doel = Path(hass.config.path("blueprints/automation/btx_omroep"))
+    doel.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "blueprints/automation/btx_omroep/radio_planning.yaml", doel)
+    aan = async_mock_service(hass, "switch", "turn_on")
+    hass.states.async_set("schedule.open", "off")
+    assert await async_setup_component(
+        hass,
+        "automation",
+        {"automation": {"id": "r", "use_blueprint": {"path": "btx_omroep/radio_planning.yaml",
+            "input": {"radio": "switch.x", "schema": "schedule.open"}}}},
+    )
+    await hass.async_block_till_done()
+    automaties = hass.states.async_entity_ids("automation")
+    assert len(automaties) == 1 and hass.states.get(automaties[0]).state == "on", "blueprint zonder kalenders moet geldig zijn"
+    hass.states.async_set("schedule.open", "on")
+    await hass.async_block_till_done()
+    assert len(aan) == 1

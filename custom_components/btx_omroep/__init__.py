@@ -42,11 +42,12 @@ from .const import (
     SIGNAAL_STATUS,
     URL_BESTAND,
 )
+from .coordinator import OmroepCoordinator
 from .tuner import FrontierOmroep, Resultaat, Toestand, TunerFout
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.NUMBER, Platform.SELECT, Platform.SENSOR, Platform.SWITCH]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 OMROEP_SCHEMA = vol.Schema(
@@ -67,6 +68,7 @@ class OmroepData:
     tuner: FrontierOmroep
     sessie: aiohttp.ClientSession
     lock: asyncio.Lock
+    coordinator: OmroepCoordinator
     status: str = "klaar"
     attributen: dict[str, Any] = field(default_factory=dict)
 
@@ -100,7 +102,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmroepConfigEntry) -> bo
         raise ConfigEntryNotReady(f"Tuner {host} niet bereikbaar: {err}") from err
     # één wachtrij per tuner, die ook een herlaad van de integratie overleeft
     lock = hass.data[DOMAIN].setdefault("locks", {}).setdefault(host, asyncio.Lock())
-    entry.runtime_data = OmroepData(tuner=tuner, sessie=sessie, lock=lock)
+    coordinator = OmroepCoordinator(hass, tuner, lock)
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady:
+        await sessie.close()
+        raise
+    entry.runtime_data = OmroepData(tuner=tuner, sessie=sessie, lock=lock, coordinator=coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_opties_gewijzigd))
     return True
@@ -237,7 +245,8 @@ async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceRes
                 )
             if oud is not None and not resultaat.hersteld and not resultaat.noodherstel:
                 _plan_noodherstel(hass, data, oud)
-            return resultaat, oud
+        await data.coordinator.async_request_refresh()
+        return resultaat, oud
 
     # in een eigen taak en afgeschermd: wordt de automatisering geannuleerd (herladen,
     # bewerken), dan loopt het bericht en vooral het herstel van de radio toch verder
