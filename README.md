@@ -53,6 +53,18 @@ data:
 `blueprints/automation/btx_omroep/omroep_planning.yaml` en maak per boodschap een
 automatisering: vaste uren of elke X minuten, weekdagen, volume, aantal keer en pauze.
 
+## Muziekje, tekst naar spraak en eigen boodschappen
+
+- **Muziekje**: elke boodschap start met een stijgende gong en eindigt met een dalende gong
+  (meegeleverd, eigen aanmaak). Uitschakelen met `switch.<tuner>_muziekje_voor_en_na` of per actie met `muziekje: false`.
+- **Tekst naar spraak**: `tekst: "..."` in plaats van `bericht`. Standaard via Google Translate
+  (integratie *Google Translate text-to-speech*, taal Nederlands); een andere dienst kies je in de opties.
+- **Eigen boodschappen**: zet geluidsbestanden in de mediamap `omroep` (Media → Lokale media → omroep → Uploaden).
+  Ze verschijnen binnen 30 s in `select.<tuner>_boodschap`.
+- **Tekst bewaren**: vul `text.<tuner>_omroeptekst` en `text.<tuner>_naam_boodschap` in en druk op
+  `button.<tuner>_tekst_opslaan_als_boodschap`: de spraak wordt als mp3 in de map `omroep` bewaard en is daarna
+  kiesbaar en inplanbaar zoals elke andere boodschap.
+
 ## Bediening
 
 | Entiteit | Functie |
@@ -61,6 +73,10 @@ automatisering: vaste uren of elke X minuten, weekdagen, volume, aantal keer en 
 | `select.<tuner>_dab_zender` | DAB zender kiezen uit de favorieten van de tuner (bv. `1. VRT StuBru`) |
 | `number.<tuner>_volume` | Volume (0 tot 32) |
 | `sensor.<tuner>_omroep_status` | Klaar, bezig of fout, met het laatste resultaat |
+| `select.<tuner>_boodschap` | Boodschap kiezen uit de map `omroep` |
+| `number.<tuner>_volume_boodschap`, `number.<tuner>_aantal_keer` | Volume en aantal keer voor de knoppen |
+| `button.<tuner>_boodschap_afspelen`, `button.<tuner>_tekst_omroepen` | Gekozen boodschap of ingetypte tekst omroepen |
+| `switch.<tuner>_muziekje_voor_en_na` | Gong voor en na aan/uit |
 
 Zender, aan/uit en volume wachten tot een lopend omroepbericht klaar is.
 De keuzelijst toont de favorieten zoals ze op de tuner staan; nieuwe favorieten

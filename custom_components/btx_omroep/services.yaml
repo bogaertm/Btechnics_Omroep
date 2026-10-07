@@ -6,11 +6,20 @@ omroep:
         config_entry:
           integration: btx_omroep
     bericht:
-      required: true
+      required: false
       selector:
         media:
           accept:
             - audio/*
+    tekst:
+      required: false
+      selector:
+        text:
+          multiline: true
+    muziekje:
+      required: false
+      selector:
+        boolean:
     volume:
       required: false
       default: 32

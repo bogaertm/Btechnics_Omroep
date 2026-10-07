@@ -11,8 +11,9 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.const import CONF_HOST
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
 
-from .const import CONF_BASIS_URL, CONF_PIN, DEFAULT_PIN, DOMAIN
+from .const import CONF_BASIS_URL, CONF_PIN, CONF_TTS, DEFAULT_PIN, DOMAIN
 from .tuner import FrontierOmroep, TunerFout
 
 
@@ -78,6 +79,9 @@ class OmroepOptionsFlow(OptionsFlow):
                 vol.Optional(
                     CONF_BASIS_URL, description={"suggested_value": huidig.get(CONF_BASIS_URL, "")}
                 ): str,
+                vol.Optional(CONF_TTS, description={"suggested_value": huidig.get(CONF_TTS)}): EntitySelector(
+                    EntitySelectorConfig(domain="tts")
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=fouten)

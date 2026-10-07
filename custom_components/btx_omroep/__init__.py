@@ -31,11 +31,18 @@ from homeassistant.util import dt as dt_util
 from .const import (
     ATTR_BERICHT,
     ATTR_HERHALINGEN,
+    ATTR_MUZIEKJE,
     ATTR_PAUZE,
+    ATTR_TEKST,
     ATTR_TUNER,
     ATTR_VOLUME,
+    AUDIO_EXTENSIES,
     CONF_BASIS_URL,
     CONF_PIN,
+    CONF_TTS,
+    GELUID_IN,
+    GELUID_UIT,
+    MAP_OMROEP,
     DEFAULT_PIN,
     DOMAIN,
     SERVICE_OMROEP,
@@ -47,13 +54,16 @@ from .tuner import FrontierOmroep, Resultaat, Toestand, TunerFout
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.NUMBER, Platform.SELECT, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.BUTTON, Platform.NUMBER, Platform.SELECT, Platform.SENSOR, Platform.SWITCH, Platform.TEXT]
+GELUID_MAP = Path(__file__).parent / "geluid"
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 OMROEP_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_TUNER): vol.Any(None, cv.string),
-        vol.Required(ATTR_BERICHT): vol.Any(cv.string, dict),
+        vol.Optional(ATTR_BERICHT): vol.Any(cv.string, dict),
+        vol.Optional(ATTR_TEKST): cv.string,
+        vol.Optional(ATTR_MUZIEKJE): cv.boolean,
         vol.Optional(ATTR_VOLUME): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional(ATTR_HERHALINGEN, default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
         vol.Optional(ATTR_PAUZE, default=1): vol.All(vol.Coerce(float), vol.Range(min=0, max=300)),
@@ -71,6 +81,10 @@ class OmroepData:
     coordinator: OmroepCoordinator
     status: str = "klaar"
     attributen: dict[str, Any] = field(default_factory=dict)
+    # instellingen van de dashboardknoppen (bewaard door de entiteiten zelf)
+    instellingen: dict[str, Any] = field(
+        default_factory=lambda: {"muziekje": True, "volume": 32, "herhalingen": 1, "tekst": "", "naam": "", "boodschap": None}
+    )
 
 
 type OmroepConfigEntry = ConfigEntry[OmroepData]
@@ -109,6 +123,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmroepConfigEntry) -> bo
         await sessie.close()
         raise
     entry.runtime_data = OmroepData(tuner=tuner, sessie=sessie, lock=lock, coordinator=coordinator)
+    await hass.async_add_executor_job(_maak_omroepmap, hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_opties_gewijzigd))
     return True
@@ -135,6 +150,91 @@ def _kies_entry(hass: HomeAssistant, entry_id: str | None) -> OmroepConfigEntry:
     if len(entries) > 1:
         raise ServiceValidationError("Meerdere tuners ingesteld: kies er één via 'tuner'")
     return entries[0]
+
+
+def omroepmap(hass: HomeAssistant) -> Path | None:
+    """Map met de boodschappen: <lokale mediamap>/omroep."""
+    mappen = hass.config.media_dirs
+    basis = mappen.get("local") or next(iter(mappen.values()), None)
+    return Path(basis) / MAP_OMROEP if basis else None
+
+
+def _maak_omroepmap(hass: HomeAssistant) -> None:
+    if (map_ := omroepmap(hass)) is not None:
+        try:
+            map_.mkdir(parents=True, exist_ok=True)
+        except OSError as err:
+            _LOGGER.warning("Kon map %s niet aanmaken: %s", map_, err)
+
+
+def boodschappen(hass: HomeAssistant) -> list[str]:
+    """Bestandsnamen van de boodschappen in de omroepmap (voor de keuzelijst)."""
+    map_ = omroepmap(hass)
+    if map_ is None or not map_.is_dir():
+        return []
+    return sorted(
+        (p.name for p in map_.iterdir() if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIES),
+        key=str.lower,
+    )
+
+
+def _standaard_tts(hass: HomeAssistant) -> str | None:
+    tts = sorted(hass.states.async_entity_ids("tts"))
+    return next((t for t in tts if "google_translate" in t), tts[0] if tts else None)
+
+
+async def _tts_url(hass: HomeAssistant, entry: OmroepConfigEntry, tekst: str, basis: str) -> str:
+    """Laat Home Assistant de tekst omzetten naar spraak en geef de link voor de tuner."""
+    from homeassistant.components import media_source, tts  # noqa: PLC0415
+
+    engine = entry.options.get(CONF_TTS) or _standaard_tts(hass)
+    if not engine:
+        raise ServiceValidationError(
+            "Geen tekst-naar-spraak dienst gevonden: voeg bv. de integratie Google Translate text-to-speech toe"
+        )
+    try:
+        media_id = tts.generate_media_source_id(hass, tekst, engine=engine, cache=True)
+        media = await media_source.async_resolve_media(hass, media_id, None)
+    except HomeAssistantError as err:
+        raise HomeAssistantError(f"Tekst naar spraak mislukt: {err}") from err
+    return media.url if media.url.startswith("http") else basis + media.url
+
+
+def veilige_naam(naam: str) -> str:
+    """Bestandsnaam zonder vreemde tekens, bv. 'Pauze 10u!' -> 'Pauze 10u'."""
+    schoon = re.sub(r"[^\w \-.]", "", naam, flags=re.UNICODE).strip().strip(".")
+    return re.sub(r"\s+", " ", schoon)[:60]
+
+
+async def bewaar_tekst_als_boodschap(hass: HomeAssistant, entry: OmroepConfigEntry, tekst: str, naam: str) -> str:
+    """Zet tekst om naar spraak en bewaar ze als bestand in de omroepmap. Geeft de bestandsnaam."""
+    from homeassistant.components import tts  # noqa: PLC0415
+
+    tekst, naam = tekst.strip(), veilige_naam(naam or tekst[:40])
+    if not tekst:
+        raise ServiceValidationError("Vul eerst een tekst in")
+    if not naam:
+        raise ServiceValidationError("Geef de boodschap een naam")
+    map_ = omroepmap(hass)
+    if map_ is None:
+        raise ServiceValidationError("Geen mediamap ingesteld in Home Assistant")
+    engine = entry.options.get(CONF_TTS) or _standaard_tts(hass)
+    if not engine:
+        raise ServiceValidationError("Geen tekst-naar-spraak dienst gevonden")
+    media_id = tts.generate_media_source_id(hass, tekst, engine=engine, cache=True)
+    try:
+        extensie, inhoud = await tts.async_get_media_source_audio(hass, media_id)
+    except HomeAssistantError as err:
+        raise HomeAssistantError(f"Tekst naar spraak mislukt: {err}") from err
+    bestand = map_ / f"{naam}.{extensie or 'mp3'}"
+
+    def _schrijf() -> None:
+        map_.mkdir(parents=True, exist_ok=True)
+        bestand.write_bytes(inhoud)
+
+    await hass.async_add_executor_job(_schrijf)
+    _LOGGER.info("Boodschap %s opgeslagen", bestand)
+    return bestand.name
 
 
 def _media_mappen(hass: HomeAssistant) -> dict[str, Path]:
@@ -201,17 +301,42 @@ def _zet_status(hass: HomeAssistant, entry: OmroepConfigEntry, status: str, **at
 async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _kies_entry(hass, call.data.get(ATTR_TUNER))
     data = entry.runtime_data
-    pad = await hass.async_add_executor_job(_bestand_pad, hass, call.data[ATTR_BERICHT])
+    tekst = (call.data.get(ATTR_TEKST) or "").strip()
+    bericht = call.data.get(ATTR_BERICHT)
+    if bool(tekst) == bool(bericht):
+        raise ServiceValidationError("Geef een bericht (geluidsbestand) of een tekst, niet allebei en niet geen van beide")
     basis = await _basis_url(hass, entry)
+    muziekje = call.data.get(ATTR_MUZIEKJE, data.instellingen["muziekje"])
+
+    pad: Path | None = None
+    if tekst:
+        naam = f"tekst: {tekst[:60]}"
+        tts_url = await _tts_url(hass, entry, tekst, basis)
+    else:
+        pad = await hass.async_add_executor_job(_bestand_pad, hass, bericht)
+        naam = pad.name
 
     async def _bericht() -> tuple[Resultaat, Toestand | None]:
         # één bericht tegelijk per tuner: volgende berichten wachten in de rij
         async with data.lock:
-            token = secrets.token_urlsafe(16)
-            url = basis + URL_BESTAND.format(token=token, naam=quote(pad.name))
             bestanden: dict[str, Bestand] = hass.data[DOMAIN]["bestanden"]
-            bestanden[token] = Bestand(pad)
-            _zet_status(hass, entry, "bezig", bericht=pad.name, gestart=dt_util.now().isoformat(), fouten=[])
+            tokens: list[str] = []
+
+            def _link(bestand: Path) -> tuple[str, str]:
+                token = secrets.token_urlsafe(16)
+                bestanden[token] = Bestand(bestand)
+                tokens.append(token)
+                return token, basis + URL_BESTAND.format(token=token, naam=quote(bestand.name))
+
+            bericht_token = None
+            if pad is not None:
+                bericht_token, url = _link(pad)
+            else:
+                url = tts_url
+            intro = _link(GELUID_MAP / GELUID_IN)[1] if muziekje else None
+            outro = _link(GELUID_MAP / GELUID_UIT)[1] if muziekje else None
+
+            _zet_status(hass, entry, "bezig", bericht=naam, gestart=dt_util.now().isoformat(), fouten=[])
             oud: Toestand | None = None
             resultaat = Resultaat(gevraagd=call.data[ATTR_HERHALINGEN])
             try:
@@ -220,8 +345,10 @@ async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceRes
                     volume=call.data.get(ATTR_VOLUME),
                     herhalingen=call.data[ATTR_HERHALINGEN],
                     pauze=call.data[ATTR_PAUZE],
+                    intro=intro,
+                    outro=outro,
                 )
-                if not bestanden[token].opgehaald:
+                if bericht_token and not bestanden[bericht_token].opgehaald:
                     resultaat.fouten.append(
                         f"de tuner haalde het bestand niet op bij {basis}: controleer de basis URL in de opties"
                     )
@@ -232,7 +359,8 @@ async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceRes
                 resultaat.fouten.append(f"onverwachte fout: {err}")
                 _LOGGER.exception("Onverwachte fout tijdens omroep")
             finally:
-                bestanden.pop(token, None)
+                for token in tokens:
+                    bestanden.pop(token, None)
                 _zet_status(
                     hass,
                     entry,
@@ -250,16 +378,16 @@ async def _voer_omroep_uit(hass: HomeAssistant, call: ServiceCall) -> ServiceRes
 
     # in een eigen taak en afgeschermd: wordt de automatisering geannuleerd (herladen,
     # bewerken), dan loopt het bericht en vooral het herstel van de radio toch verder
-    taak = hass.async_create_background_task(_bericht(), f"btx_omroep {pad.name}")
+    taak = hass.async_create_background_task(_bericht(), f"btx_omroep {naam}")
     resultaat, _ = await asyncio.shield(taak)
 
     if not resultaat.ok:
-        _LOGGER.warning("Omroep %s niet volledig gelukt: %s", pad.name, resultaat.fouten)
+        _LOGGER.warning("Omroep %s niet volledig gelukt: %s", naam, resultaat.fouten)
         if resultaat.gespeeld == 0:
-            raise HomeAssistantError(f"Omroep {pad.name} mislukt: {'; '.join(resultaat.fouten)}")
+            raise HomeAssistantError(f"Omroep {naam} mislukt: {'; '.join(resultaat.fouten)}")
     if call.return_response:
         return {
-            "bericht": pad.name,
+            "bericht": naam,
             "gespeeld": resultaat.gespeeld,
             "gevraagd": resultaat.gevraagd,
             "hersteld": resultaat.hersteld,

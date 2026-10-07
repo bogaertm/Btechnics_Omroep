@@ -67,6 +67,7 @@ async def ingesteld(hass: HomeAssistant, nep, tmp_path, hass_client_no_auth):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    entry.runtime_data.instellingen["muziekje"] = False  # bestaande tests zonder gong; aparte test met gong
     return entry
 
 
@@ -469,3 +470,97 @@ async def test_radio_planning_zonder_kalenders(hass: HomeAssistant, caplog) -> N
     hass.states.async_set("schedule.open", "on")
     await hass.async_block_till_done()
     assert len(aan) == 1
+
+
+
+# ------------------------------------------------------------ muziekje, tekst, knoppen
+def _naam(url: str) -> str:
+    return url.rsplit("/", 1)[-1]
+
+
+async def test_muziekje_voor_en_na(hass: HomeAssistant, ingesteld, nep) -> None:
+    ingesteld.runtime_data.instellingen["muziekje"] = True
+    await hass.services.async_call(
+        DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3", "volume": 32, "herhalingen": 2, "pauze": 0.1}, blocking=True
+    )
+    assert [_naam(u) for u in nep.gespeeld] == ["gong_in.mp3", "test%20bericht.mp3", "test%20bericht.mp3", "gong_uit.mp3"]
+    assert nep.opgehaald == [200, 200, 200, 200]
+    assert (nep.mode, nep.status, nep.volume, nep.mute) == (5, 2, 25, 0)
+    assert hass.data[DOMAIN]["bestanden"] == {}
+
+
+async def test_muziekje_uit_via_actie(hass: HomeAssistant, ingesteld, nep) -> None:
+    ingesteld.runtime_data.instellingen["muziekje"] = True
+    await hass.services.async_call(DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3", "muziekje": False}, blocking=True)
+    assert [_naam(u) for u in nep.gespeeld] == ["test%20bericht.mp3"]
+
+
+async def test_bericht_of_tekst_verplicht(hass: HomeAssistant, ingesteld) -> None:
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "omroep", {}, blocking=True)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "omroep", {"bericht": "omroep/test bericht.mp3", "tekst": "x"}, blocking=True)
+
+
+async def test_tekst_naar_spraak(hass: HomeAssistant, ingesteld, nep, tmp_path) -> None:
+    from custom_components.btx_omroep import Bestand
+
+    async def nep_tts(hass_, entry, tekst, basis):
+        assert tekst == "Pauze over vijf minuten"
+        hass_.data[DOMAIN]["bestanden"]["tts"] = Bestand(tmp_path / "omroep" / "test bericht.mp3")
+        return basis + "/api/btx_omroep/bestand/tts/spraak.mp3"
+
+    with patch("custom_components.btx_omroep._tts_url", nep_tts):
+        antwoord = await hass.services.async_call(
+            DOMAIN, "omroep", {"tekst": "Pauze over vijf minuten"}, blocking=True, return_response=True
+        )
+    assert antwoord["gespeeld"] == 1 and antwoord["bericht"].startswith("tekst: Pauze")
+    assert _naam(nep.gespeeld[0]) == "spraak.mp3" and nep.opgehaald == [200]
+    assert (nep.mode, nep.status, nep.volume, nep.mute) == (5, 2, 25, 0)
+
+
+async def test_tekst_opslaan_en_afspelen_via_knoppen(hass: HomeAssistant, ingesteld, nep, tmp_path) -> None:
+    import homeassistant.components.tts  # noqa: F401
+
+    async def tts_audio(hass_, media_id):
+        return "mp3", b"ID3" + b"\0" * 100
+
+    await hass.services.async_call("text", "set_value", {"entity_id": "text.nep_tuner_omroeptekst", "value": "Het magazijn sluit binnen 10 minuten"}, blocking=True)
+    await hass.services.async_call("text", "set_value", {"entity_id": "text.nep_tuner_naam_boodschap", "value": "Sluiting 10 min!"}, blocking=True)
+    with patch("homeassistant.components.tts.generate_media_source_id", return_value="media-source://tts/x"), patch(
+        "homeassistant.components.tts.async_get_media_source_audio", tts_audio
+    ), patch("custom_components.btx_omroep._standaard_tts", return_value="tts.google"):
+        await hass.services.async_call("button", "press", {"entity_id": "button.nep_tuner_tekst_opslaan_als_boodschap"}, blocking=True)
+    await hass.async_block_till_done()
+    assert (tmp_path / "omroep" / "Sluiting 10 min.mp3").is_file()
+    keuze = hass.states.get("select.nep_tuner_boodschap")
+    assert "Sluiting 10 min.mp3" in keuze.attributes["options"] and keuze.state == "Sluiting 10 min.mp3"
+
+    await hass.services.async_call("number", "set_value", {"entity_id": "number.nep_tuner_volume_boodschap", "value": 28}, blocking=True)
+    await hass.services.async_call("button", "press", {"entity_id": "button.nep_tuner_boodschap_afspelen"}, blocking=True)
+    assert _naam(nep.gespeeld[-1]) == "Sluiting%2010%20min.mp3"
+    assert nep.volume_tijdens_bericht[-1] == 28
+    assert (nep.mode, nep.status, nep.volume, nep.mute) == (5, 2, 25, 0)
+
+
+async def test_keuzelijst_toont_bestanden_omroepmap(hass: HomeAssistant, ingesteld, tmp_path) -> None:
+    keuze = hass.states.get("select.nep_tuner_boodschap")
+    assert keuze.attributes["options"] == ["test bericht.mp3"]
+    (tmp_path / "omroep" / "notities.txt").write_text("geen audio")
+    (tmp_path / "omroep" / "Aankondiging.wav").write_bytes(b"RIFF")
+    hass.bus.async_fire("btx_omroep_boodschappen_gewijzigd", {})
+    await hass.async_block_till_done()
+    assert hass.states.get("select.nep_tuner_boodschap").attributes["options"] == ["Aankondiging.wav", "test bericht.mp3"]
+
+
+async def test_muziekje_schakelaar_en_instellingen_bestaan(hass: HomeAssistant, ingesteld) -> None:
+    for eid in (
+        "switch.nep_tuner_muziekje_voor_en_na",
+        "number.nep_tuner_aantal_keer",
+        "number.nep_tuner_volume_boodschap",
+        "button.nep_tuner_tekst_omroepen",
+        "button.nep_tuner_boodschap_afspelen",
+        "text.nep_tuner_omroeptekst",
+        "text.nep_tuner_naam_boodschap",
+    ):
+        assert hass.states.get(eid) is not None, eid

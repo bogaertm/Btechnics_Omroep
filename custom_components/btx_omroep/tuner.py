@@ -363,7 +363,13 @@ class FrontierOmroep:
 
     # ------------------------------------------------------------ omroep
     async def omroep(
-        self, url: str, volume: int | None = None, herhalingen: int = 1, pauze: float = 1.0
+        self,
+        url: str,
+        volume: int | None = None,
+        herhalingen: int = 1,
+        pauze: float = 1.0,
+        intro: str | None = None,
+        outro: str | None = None,
     ) -> tuple[Resultaat, Toestand]:
         """Speel een bericht af en herstel daarna de vorige toestand.
 
@@ -381,11 +387,15 @@ class FrontierOmroep:
             doelvolume = None
             if volume is not None:
                 doelvolume = max(0, min(int(volume), await self.max_volume()))
+            if intro:
+                await self.speel_url(intro, doelvolume)
             for keer in range(resultaat.gevraagd):
                 if await self.speel_url(url, doelvolume):
                     resultaat.gespeeld += 1
                 if keer < resultaat.gevraagd - 1 and pauze > 0:
                     await asyncio.sleep(pauze)
+            if outro:
+                await self.speel_url(outro, doelvolume)
         except TunerFout as err:
             resultaat.fouten.append(str(err))
             _LOGGER.warning("Omroep onderbroken: %s", err)

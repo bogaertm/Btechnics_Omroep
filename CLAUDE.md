@@ -19,7 +19,12 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Eerste echte test via HA 2026.9.4 (7/10/2026): bericht gespeeld, DAB vanzelf terug, volume en mute correct hersteld (20 s)
 - [ ] Mp3 boodschappen van de klant in `/media/omroep/` zetten en luidheid normaliseren (ongeveer -7 LUFS)
 - [ ] Radiovolume lager en versterker hoger zetten, zodat boodschappen op 32 duidelijk boven de radio uitkomen
-- [ ] Dashboardkaart met knop per boodschap, zenderkeuze, aan/uit en volume
+- [x] Dashboard audio-defrancq aangemaakt (radio, omroep, planning, kalender); visueel nakijken zodra de Pi terug online is
+- [ ] Intro en outro gong rond elke boodschap (eigen gong, aan/uit te zetten)
+- [ ] Tekst naar spraak omroepen via Google Translate (tekstvak en knop op dashboard)
+- [ ] Tekst naar spraak opslaan als vaste boodschap (mp3 in /media/omroep, daarna kiesbaar en inplanbaar)
+- [ ] Klant kan zelf mp3 boodschappen uploaden en kiezen (keuzelijst uit /media/omroep, afspeelknop)
+- [ ] Kalender op dashboard werkt niet volgens Matthias: nakijken, sluitingen toevoegen mogelijk maken
 - [x] Op de HA van de klant: schema's zomer (ma tot vr 7:00 tot 17:30) en winter (ma tot vr 7:30 tot 12:00), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
 - [x] Repo publiek: installatie op de Pi via HACS (aangepaste repository), blueprints importeren via URL
 - [x] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (blueprint radio_planning.yaml)

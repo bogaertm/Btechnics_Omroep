@@ -23,7 +23,8 @@
         "title": "Instellingen",
         "data": {
           "pin": "PIN",
-          "basis_url": "Basis URL van Home Assistant voor de tuner (leeg = automatisch)"
+          "basis_url": "Basis URL van Home Assistant voor de tuner (leeg = automatisch)",
+          "tts": "Tekst naar spraak dienst (leeg = automatisch, bij voorkeur Google Translate)"
         },
         "data_description": {
           "basis_url": "Enkel invullen als de tuner Home Assistant niet vindt, bv. http://192.168.1.10:8123"
@@ -49,16 +50,47 @@
     "switch": {
       "radio": {
         "name": "Radio"
+      },
+      "muziekje": {
+        "name": "Muziekje voor en na"
       }
     },
     "select": {
       "zender": {
         "name": "DAB zender"
+      },
+      "boodschap": {
+        "name": "Boodschap"
       }
     },
     "number": {
       "volume": {
         "name": "Volume"
+      },
+      "omroep_volume": {
+        "name": "Volume boodschap"
+      },
+      "herhalingen": {
+        "name": "Aantal keer"
+      }
+    },
+    "button": {
+      "boodschap_afspelen": {
+        "name": "Boodschap afspelen"
+      },
+      "tekst_omroepen": {
+        "name": "Tekst omroepen"
+      },
+      "tekst_opslaan": {
+        "name": "Tekst opslaan als boodschap"
+      }
+    },
+    "text": {
+      "tekst": {
+        "name": "Omroeptekst"
+      },
+      "naam": {
+        "name": "Naam boodschap"
       }
     }
   },
@@ -73,7 +105,7 @@
         },
         "bericht": {
           "name": "Bericht",
-          "description": "Mp3 uit de mediamap van Home Assistant."
+          "description": "Geluidsbestand uit de mediamap van Home Assistant (of gebruik tekst)."
         },
         "volume": {
           "name": "Volume",
@@ -86,6 +118,14 @@
         "pauze": {
           "name": "Pauze",
           "description": "Seconden stilte tussen de herhalingen."
+        },
+        "tekst": {
+          "name": "Tekst",
+          "description": "Tekst die via tekst naar spraak omgeroepen wordt (in plaats van een bestand)."
+        },
+        "muziekje": {
+          "name": "Muziekje",
+          "description": "Gong voor en na de boodschap. Leeg = instelling op het dashboard."
         }
       }
     }
