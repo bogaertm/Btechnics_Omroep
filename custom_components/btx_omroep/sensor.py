@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import OmroepConfigEntry
 from .const import DOMAIN, SIGNAAL_STATUS
+from .entiteit import OmroepEntiteit
 
 STATUSSEN = ["klaar", "bezig", "fout"]
 
@@ -19,7 +20,7 @@ STATUSSEN = ["klaar", "bezig", "fout"]
 async def async_setup_entry(
     hass: HomeAssistant, entry: OmroepConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    async_add_entities([OmroepStatus(entry)])
+    async_add_entities([OmroepStatus(entry), SpeeltNu(entry.runtime_data.coordinator, entry, "speelt_nu")])
 
 
 class OmroepStatus(SensorEntity):
@@ -59,3 +60,38 @@ class OmroepStatus(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return dict(self._entry.runtime_data.attributen)
+
+
+BRON_NAMEN = {
+    "DAB": "DAB",
+    "FM": "FM",
+    "AIRABLE_RADIO": "Internetradio",
+    "MP": "Omroepbericht",
+    "AUXIN": "AUX",
+    "Bluetooth": "Bluetooth",
+    "Spotify": "Spotify",
+}
+
+
+class SpeeltNu(OmroepEntiteit, SensorEntity):
+    """Wat de tuner nu speelt, ook als de zender niet in de favorieten staat."""
+
+    _attr_icon = "mdi:radio"
+
+    @property
+    def native_value(self) -> str | None:
+        data = self.coordinator.data or {}
+        if not data.get("power"):
+            return "Uit"
+        return data.get("zender") or self._bron() or "Onbekend"
+
+    def _bron(self) -> str | None:
+        data = self.coordinator.data or {}
+        modes = self.coordinator.tuner._modes or {}
+        bron_id = next((k for k, v in modes.items() if v == data.get("mode")), None)
+        return BRON_NAMEN.get(bron_id, bron_id) if bron_id else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        return {"bron": self._bron(), "volume": data.get("volume")}

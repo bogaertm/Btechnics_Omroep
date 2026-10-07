@@ -45,6 +45,9 @@
           "bezig": "Bezig",
           "fout": "Fout"
         }
+      },
+      "speelt_nu": {
+        "name": "Speelt nu"
       }
     },
     "switch": {

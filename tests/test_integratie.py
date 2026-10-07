@@ -577,3 +577,12 @@ async def test_standaard_stem_in_taal_van_ha(hass: HomeAssistant) -> None:
     assert _standaard_tts(hass) == "tts.google_translate_nl_be"
     hass.config.language = "en"
     assert _standaard_tts(hass) == "tts.google_translate_en_com"
+
+
+
+async def test_speelt_nu(hass: HomeAssistant, ingesteld, nep) -> None:
+    staat = hass.states.get("sensor.nep_tuner_speelt_nu")
+    assert staat.state == "VRT StuBru" and staat.attributes["bron"] == "DAB"
+    await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.nep_tuner_radio"}, blocking=True)
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.nep_tuner_speelt_nu").state == "Uit"
