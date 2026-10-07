@@ -17,11 +17,15 @@ blueprint:
               domain: switch
     schema:
       name: Weekplanning
-      description: Schema helper (Instellingen → Apparaten & diensten → Helpers → Schema) met de openingsuren.
+      description: >-
+        Schema helper (Instellingen → Apparaten & diensten → Helpers → Schema) met de openingsuren,
+        of een aan/uit sensor, bv. een template die tussen een zomer- en winterschema kiest.
       selector:
         entity:
           filter:
             - domain: schedule
+            - domain: binary_sensor
+            - domain: input_boolean
     stil_kalenders:
       name: Feestdagen en sluitingen
       description: >-
