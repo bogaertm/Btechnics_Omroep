@@ -155,17 +155,27 @@ class FrontierOmroep:
             's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>'
             f'<u:{actie} xmlns:u="{AVT}">{body}</u:{actie}></s:Body></s:Envelope>'
         )
-        headers = {"Content-Type": 'text/xml; charset="utf-8"', "SOAPACTION": f'"{AVT}#{actie}"'}
-        try:
-            async with self._session.post(
-                self._avt, data=env.encode(), headers=headers, timeout=aiohttp.ClientTimeout(total=10)
-            ) as resp:
-                tekst = await resp.text(errors="ignore")
-                if resp.status != 200:
-                    raise TunerFout(f"DLNA {actie}: HTTP {resp.status}")
-                return tekst
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise TunerFout(f"DLNA {actie}: {err}") from err
+        # De renderer sluit verbindingen na een bericht: nooit keep-alive hergebruiken
+        # en bij een verbroken verbinding opnieuw proberen.
+        headers = {
+            "Content-Type": 'text/xml; charset="utf-8"',
+            "SOAPACTION": f'"{AVT}#{actie}"',
+            "Connection": "close",
+        }
+        laatste: Exception | None = None
+        for poging in range(3):
+            try:
+                async with self._session.post(
+                    self._avt, data=env.encode(), headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    tekst = await resp.text(errors="ignore")
+                    if resp.status != 200:
+                        raise TunerFout(f"DLNA {actie}: HTTP {resp.status}")
+                    return tekst
+            except (aiohttp.ClientError, asyncio.TimeoutError, ConnectionError) as err:
+                laatste = err
+                await asyncio.sleep(1 + poging)
+        raise TunerFout(f"DLNA {actie}: {laatste}")
 
     async def transport_status(self) -> str:
         tekst = await self._soap("GetTransportInfo", {"InstanceID": 0})
@@ -181,11 +191,12 @@ class FrontierOmroep:
         start = time.monotonic()
         speelde = False
         while time.monotonic() - start < max_duur:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.25)
             status = await self.transport_status()
-            if status == "PLAYING":
+            if status in ("PLAYING", "TRANSITIONING"):
                 speelde = True
             elif speelde and status in ("STOPPED", "NO_MEDIA_PRESENT"):
+                await asyncio.sleep(1)  # renderer even laten afronden voor een volgende opdracht
                 return True
             elif not speelde and time.monotonic() - start > 20:
                 raise TunerFout(f"bericht start niet (status {status})")

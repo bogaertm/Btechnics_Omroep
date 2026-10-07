@@ -1,0 +1,38 @@
+omroep:
+  fields:
+    tuner:
+      required: false
+      selector:
+        config_entry:
+          integration: btx_omroep
+    bericht:
+      required: true
+      selector:
+        media:
+          accept:
+            - audio/*
+    volume:
+      required: false
+      default: 32
+      selector:
+        number:
+          min: 0
+          max: 32
+          mode: slider
+    herhalingen:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+          mode: slider
+    pauze:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 120
+          unit_of_measurement: s
+          mode: box

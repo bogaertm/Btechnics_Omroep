@@ -1,0 +1,74 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tuner toevoegen",
+        "description": "IP adres van de Frontier Silicon tuner (bv. Hama DIT2105SBTX). Geef de tuner een vast IP adres in de router.",
+        "data": {
+          "host": "IP adres",
+          "pin": "PIN (standaard 1234)"
+        }
+      }
+    },
+    "error": {
+      "niet_bereikbaar": "Tuner niet bereikbaar. Controleer IP adres, PIN en netwerk."
+    },
+    "abort": {
+      "already_configured": "Deze tuner is al toegevoegd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Instellingen",
+        "data": {
+          "pin": "PIN",
+          "basis_url": "Basis URL van Home Assistant voor de tuner (leeg = automatisch)"
+        },
+        "data_description": {
+          "basis_url": "Enkel invullen als de tuner Home Assistant niet vindt, bv. http://192.168.1.10:8123"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Omroep status",
+        "state": {
+          "klaar": "Klaar",
+          "bezig": "Bezig",
+          "fout": "Fout"
+        }
+      }
+    }
+  },
+  "services": {
+    "omroep": {
+      "name": "Omroepbericht afspelen",
+      "description": "Onderbreekt de radio, speelt een mp3 af op de tuner en zet daarna bron, zender en volume terug.",
+      "fields": {
+        "tuner": {
+          "name": "Tuner",
+          "description": "Enkel nodig als er meerdere tuners zijn ingesteld."
+        },
+        "bericht": {
+          "name": "Bericht",
+          "description": "Mp3 uit de mediamap van Home Assistant."
+        },
+        "volume": {
+          "name": "Volume",
+          "description": "Volume tijdens het bericht (0 tot 32). Leeg = huidig volume."
+        },
+        "herhalingen": {
+          "name": "Aantal keer",
+          "description": "Hoeveel keer het bericht na elkaar speelt."
+        },
+        "pauze": {
+          "name": "Pauze",
+          "description": "Seconden stilte tussen de herhalingen."
+        }
+      }
+    }
+  }
+}

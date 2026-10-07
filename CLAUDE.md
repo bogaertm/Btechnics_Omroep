@@ -1,0 +1,21 @@
+# Btechnics Omroep
+
+HACS integratie `btx_omroep` voor omroepberichten op Frontier Silicon tuners (Hama DIT2105SBTX).
+Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry Pi.
+
+## Structuur
+- `custom_components/btx_omroep/tuner.py`: kernlogica zonder HA afhankelijkheid (FSAPI + DLNA, herstel)
+- `custom_components/btx_omroep/__init__.py`: actie `btx_omroep.omroep`, wachtrij, eenmalige bestandslink
+- `blueprints/automation/btx_omroep/omroep_planning.yaml`: planning per boodschap
+- `tests/`: nagebootste tuner + tests (`pytest`)
+
+## Afspraken
+- Niet testen op de echte tuner zonder uitdrukkelijke toestemming van Matthias
+- Testtuner (Hama DIT2105SBTX, firmware V4.5.13): bron DAB key 5, AUX key 8, DMR key 4; IP en PIN staan niet in de repo
+
+## Werkpunten
+- [ ] Installeren en testen op de Pi bij de klant (eerste echte test van de integratie in HA)
+- [ ] Mp3 boodschappen van de klant in `/media/omroep/` zetten en luidheid normaliseren (ongeveer -7 LUFS)
+- [ ] Radiovolume lager en versterker hoger zetten, zodat boodschappen op 32 duidelijk boven de radio uitkomen
+- [ ] Dashboardkaart met knop per boodschap
+- [ ] Beslissen of HACS op de Pi met een account met toegang tot deze privé repo werkt, of manuele installatie

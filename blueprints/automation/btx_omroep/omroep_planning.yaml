@@ -1,0 +1,138 @@
+blueprint:
+  name: Omroep boodschap (Btechnics)
+  description: >-
+    Speelt een omroepbericht af op vaste uren of met een vast interval,
+    op gekozen weekdagen. De radio wordt daarna automatisch hersteld.
+    Maak per boodschap een automatisering op basis van deze blueprint.
+  domain: automation
+  source_url: https://github.com/bogaertm/Btechnics_Omroep/blob/main/blueprints/automation/btx_omroep/omroep_planning.yaml
+  input:
+    bericht_sectie:
+      name: Boodschap
+      icon: mdi:bullhorn
+      input:
+        tuner:
+          name: Tuner
+          description: Enkel nodig bij meerdere tuners.
+          default: ""
+          selector:
+            config_entry:
+              integration: btx_omroep
+        bericht:
+          name: Bericht (mp3)
+          selector:
+            media:
+              accept:
+                - audio/*
+        volume:
+          name: Volume
+          default: 32
+          selector:
+            number: {min: 0, max: 32, mode: slider}
+        herhalingen:
+          name: Aantal keer
+          default: 1
+          selector:
+            number: {min: 1, max: 10, mode: slider}
+        pauze:
+          name: Pauze tussen herhalingen
+          default: 2
+          selector:
+            number: {min: 0, max: 120, unit_of_measurement: s, mode: box}
+    planning_sectie:
+      name: Planning
+      icon: mdi:calendar-clock
+      input:
+        modus:
+          name: Modus
+          default: tijden
+          selector:
+            select:
+              options:
+                - {label: Vaste uren, value: tijden}
+                - {label: Elke X minuten, value: interval}
+        tijden:
+          name: Vaste uren
+          description: "Gescheiden door komma's, bv. 10:00, 12:30, 16:45 (enkel bij modus Vaste uren)"
+          default: "10:00"
+          selector:
+            text: {}
+        interval:
+          name: Interval
+          description: Enkel bij modus Elke X minuten.
+          default: 60
+          selector:
+            number: {min: 1, max: 720, unit_of_measurement: min, mode: box}
+        start:
+          name: Vanaf
+          description: Eerste bericht bij modus Elke X minuten.
+          default: "08:00:00"
+          selector:
+            time: {}
+        einde:
+          name: Tot
+          description: Laatste mogelijke bericht bij modus Elke X minuten.
+          default: "17:00:00"
+          selector:
+            time: {}
+        weekdagen:
+          name: Weekdagen
+          default: [mon, tue, wed, thu, fri]
+          selector:
+            select:
+              multiple: true
+              options:
+                - {label: Maandag, value: mon}
+                - {label: Dinsdag, value: tue}
+                - {label: Woensdag, value: wed}
+                - {label: Donderdag, value: thu}
+                - {label: Vrijdag, value: fri}
+                - {label: Zaterdag, value: sat}
+                - {label: Zondag, value: sun}
+
+mode: queued
+max: 10
+
+variables:
+  tuner: !input tuner
+  bericht: !input bericht
+  volume: !input volume
+  herhalingen: !input herhalingen
+  pauze: !input pauze
+  modus: !input modus
+  tijden: !input tijden
+  interval: !input interval
+  start: !input start
+  einde: !input einde
+  weekdagen: !input weekdagen
+
+triggers:
+  - trigger: time_pattern
+    minutes: "/1"
+
+conditions:
+  - condition: template
+    value_template: >-
+      {% set nu = now() %}
+      {% set dag = ['mon','tue','wed','thu','fri','sat','sun'][nu.weekday()] %}
+      {% set hm = nu.strftime('%H:%M') %}
+      {% if dag not in weekdagen %}
+        {{ false }}
+      {% elif modus == 'tijden' %}
+        {{ hm in (tijden | string).replace(' ', '').split(',') | map('regex_replace', '^([0-9]):', '0\\1:') | list }}
+      {% else %}
+        {% set s = start.split(':') %}{% set e = einde.split(':') %}
+        {% set m_nu = nu.hour * 60 + nu.minute %}
+        {% set m_s = s[0] | int * 60 + s[1] | int %}
+        {% set m_e = e[0] | int * 60 + e[1] | int %}
+        {{ m_s <= m_nu <= m_e and ((m_nu - m_s) % (interval | int)) == 0 }}
+      {% endif %}
+
+actions:
+  - action: btx_omroep.omroep
+    data:
+      tuner: "{{ tuner or '' }}"
+      bericht: "{{ bericht }}"
+      volume: "{{ volume | int }}"
+      herhalingen: "{{ herhalingen | int }}"
+      pauze: "{{ pauze | float }}"
