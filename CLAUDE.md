@@ -20,18 +20,19 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [ ] Mp3 boodschappen van de klant in `/media/omroep/` zetten en luidheid normaliseren (ongeveer -7 LUFS)
 - [ ] Radiovolume lager en versterker hoger zetten, zodat boodschappen op 32 duidelijk boven de radio uitkomen
 - [x] Dashboard audio-defrancq aangemaakt (radio, omroep, planning, kalender); visueel nakijken zodra de Pi terug online is
-- [ ] Intro en outro gong rond elke boodschap (eigen gong, aan/uit te zetten)
-- [ ] Tekst naar spraak omroepen via Google Translate (tekstvak en knop op dashboard)
-- [ ] Tekst naar spraak opslaan als vaste boodschap (mp3 in /media/omroep, daarna kiesbaar en inplanbaar)
-- [ ] Klant kan zelf mp3 boodschappen uploaden en kiezen (keuzelijst uit /media/omroep, afspeelknop)
-- [ ] Kalender op dashboard werkt niet volgens Matthias: nakijken, sluitingen toevoegen mogelijk maken
+- [x] Intro en outro gong rond elke boodschap (eigen gong, aan/uit te zetten)
+- [x] Tekst naar spraak omroepen via Google Translate (tekstvak en knop op dashboard)
+- [x] Tekst naar spraak opslaan als vaste boodschap (mp3 in /media/omroep, daarna kiesbaar en inplanbaar)
+- [x] Klant kan mp3 boodschappen kiezen en afspelen (keuzelijst uit /media/omroep)
+- [ ] Uploaden van mp3 kan enkel als HA beheerder (HA vereist admin voor media upload); Jérome is gewone gebruiker: eigen uploadmogelijkheid bouwen of via Matthias
+- [x] Kalender op dashboard werkt niet volgens Matthias: nakijken, sluitingen toevoegen mogelijk maken
 - [x] Op de HA van de klant: schema's zomer (ma tot vr 7:00 tot 17:30) en winter (ma tot vr 7:30 tot 12:00), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
 - [x] Repo publiek: installatie op de Pi via HACS (aangepaste repository), blueprints importeren via URL
 - [x] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (blueprint radio_planning.yaml)
 - [x] DAB zender kiezen vanuit HA (keuzelijst favorieten), plus radio aan/uit en volume als entiteiten
 - [x] Volgorde mute, DLNA bron, volume, Play werkt op de tuner (getest 7/10/2026)
-- [ ] Dubbel drukken op Opslaan (iPhone, iPad en desktop): opslaan bij Gereed/Return in naamveld + bevestiging
-- [ ] Geschiedenis van alle afgespeelde boodschappen (tijd, boodschap, wie, resultaat)
-- [ ] Tabblad Uitleg op het dashboard
-- [ ] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
+- [x] Dubbel drukken op Opslaan (iPhone, iPad en desktop): opslaan bij Gereed/Return in naamveld + bevestiging
+- [x] Geschiedenis van alle afgespeelde boodschappen (tijd, boodschap, wie, resultaat)
+- [x] Tabblad Uitleg op het dashboard
+- [x] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet
