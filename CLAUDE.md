@@ -34,5 +34,6 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Dubbel drukken op Opslaan (iPhone, iPad en desktop): opslaan bij Gereed/Return in naamveld + bevestiging
 - [x] Geschiedenis van alle afgespeelde boodschappen (tijd, boodschap, wie, resultaat)
 - [x] Tabblad Uitleg op het dashboard
+- [x] Tegels Zomer/Winter (schakelbaar, toonden allebei "Uit") vervangen door vaste tabel met actief regime en datum van de wissel
 - [x] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet
