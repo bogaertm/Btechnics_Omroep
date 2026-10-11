@@ -26,7 +26,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Klant kan mp3 boodschappen kiezen en afspelen (keuzelijst uit /media/omroep)
 - [x] Uploaden van mp3 niet nodig voor de klant (beslissing Matthias): uploadknop en uitleg van het dashboard gehaald; nieuwe boodschappen via tekst opslaan
 - [x] Kalender op dashboard werkt niet volgens Matthias: nakijken, sluitingen toevoegen mogelijk maken
-- [x] Op de HA van de klant: schema's zomer (ma tot vr 7:00 tot 17:30) en winter (ma tot vr 7:30 tot 12:00), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
+- [x] Op de HA van de klant: schema's zomer (ma tot vr 7:00 tot 17:30) en winter (ma tot vr 7:30 tot 17:00, gecorrigeerd 11/10 door Matthias), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
 - [x] Repo publiek: installatie op de Pi via HACS (aangepaste repository), blueprints importeren via URL
 - [x] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (blueprint radio_planning.yaml)
 - [x] DAB zender kiezen vanuit HA (keuzelijst favorieten), plus radio aan/uit en volume als entiteiten
@@ -36,4 +36,5 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Tabblad Uitleg op het dashboard
 - [x] Tegels Zomer/Winter (schakelbaar, toonden allebei "Uit") vervangen door vaste tabel met actief regime en datum van de wissel
 - [x] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
+- [ ] Winteruren op de HA naar 7:30 tot 17:00 zetten (schema winter + dashboard Vandaag en Uitleg)
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet
