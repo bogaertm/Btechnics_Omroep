@@ -26,7 +26,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Klant kan mp3 boodschappen kiezen en afspelen (keuzelijst uit /media/omroep)
 - [x] Uploaden van mp3 niet nodig voor de klant (beslissing Matthias): uploadknop en uitleg van het dashboard gehaald; nieuwe boodschappen via tekst opslaan
 - [x] Kalender op dashboard werkt niet volgens Matthias: nakijken, sluitingen toevoegen mogelijk maken
-- [x] Op de HA van de klant: schema's zomer (ma tot vr 7:00 tot 17:30) en winter (ma tot vr 7:30 tot 17:00, gecorrigeerd 11/10 door Matthias), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
+- [x] Op de HA van de klant: openingsuren als 8 input_datetime velden (zomer ma tot vr 7:00 tot 17:30, winter ma tot vr 7:30 tot 17:00, zaterdag gesloten), sensor Magazijn open, Holiday België, kalender Sluitingen, automatisering Radio magazijn aan/uit
 - [x] Repo publiek: installatie op de Pi via HACS (aangepaste repository), blueprints importeren via URL
 - [x] Automatisch aan/uit met weekplanning, feestdagen en sluitingen (blueprint radio_planning.yaml)
 - [x] DAB zender kiezen vanuit HA (keuzelijst favorieten), plus radio aan/uit en volume als entiteiten
@@ -36,9 +36,9 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Tabblad Uitleg op het dashboard
 - [x] Tegels Zomer/Winter (schakelbaar, toonden allebei "Uit") vervangen door vaste tabel met actief regime en datum van de wissel
 - [x] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
-- [ ] Winteruren op de HA naar 7:30 tot 17:00 zetten (schema winter + dashboard Vandaag en Uitleg)
+- [x] Winteruren op de HA naar 7:30 tot 17:00 gezet (13/10)
 - [x] Melding "Unclosed client session": eigen sessie wordt nu gesloten bij afsluiten HA (v0.4.1)
 - [x] HACS download 404 (refs/heads/<commit>.zip): vanaf nu met GitHub releases werken (v0.4.1 gepubliceerd); release maken via gh op de Mac, niet vanuit de cloud
-- [ ] v0.4.1 installeren op de HA van de klant (HACS vernieuwen, update, herstart) en logboek nakijken
-- [ ] Openingsuren door klant aan te passen op dashboard (vraag Defrancq 13/10): 8 tijdvelden (zomer en winter, telkens ma tot vr en zaterdag, start en einde; zelfde uur = gesloten), binary_sensor.magazijn_open daarop baseren, meer niet aanpasbaar
+- [x] v0.4.1 geïnstalleerd op de HA van de klant (13/10), HACS download werkt via release. Melding Unclosed client session blijft 1x per opstart, ongeveer 45 s na start: niet van btx_omroep (enige sessie blijft open zolang integratie draait) en niet van btechnics_branding (geen sessies); bron nog onbekend
+- [x] Openingsuren door klant aan te passen op dashboard (vraag Defrancq 13/10): input_datetime.{zomer,winter}_{ma_tot_vr,zaterdag}_{open,dicht}; zelfde uur = gesloten; binary_sensor.magazijn_open (template helper) daarop gebaseerd; sectie Openingsuren aanpassen + uitleg; oude schedules verwijderd
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet
