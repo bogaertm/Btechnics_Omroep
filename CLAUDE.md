@@ -13,6 +13,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 
 ## Afspraken
 - Niet testen op de echte tuner zonder uitdrukkelijke toestemming van Matthias
+- Dashboard audio-defrancq: indeling van Matthias (13/10) aanhouden bij elke aanpassing aan instellingen of dashboard. View Audio heeft 4 secties: 1) Radio + Instellingen omroep, 2) Omroepen + Geschiedenis, 3) Tekst omroepen + Bewaren voor later, 4) Vandaag + Openingsuren aanpassen + Feestdagen en sluitingen. Nieuwe kaarten in de passende bestaande sectie, geen nieuwe secties. Volledige YAML: projectdoc claude/dashboard_referentie.md
 - Testtuner (Hama DIT2105SBTX, firmware V4.5.13): bron DAB key 5, AUX key 8, DMR key 4; IP en PIN staan niet in de repo
 
 ## Werkpunten
