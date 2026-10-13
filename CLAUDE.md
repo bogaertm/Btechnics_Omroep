@@ -37,4 +37,7 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Tegels Zomer/Winter (schakelbaar, toonden allebei "Uit") vervangen door vaste tabel met actief regime en datum van de wissel
 - [x] WhatsApp bericht voor Jérome (klant) met mock-ups van het dashboard
 - [ ] Winteruren op de HA naar 7:30 tot 17:00 zetten (schema winter + dashboard Vandaag en Uitleg)
+- [x] Melding "Unclosed client session": eigen sessie wordt nu gesloten bij afsluiten HA (v0.4.1)
+- [x] HACS download 404 (refs/heads/<commit>.zip): vanaf nu met GitHub releases werken (v0.4.1 gepubliceerd); release maken via gh op de Mac, niet vanuit de cloud
+- [ ] v0.4.1 installeren op de HA van de klant (HACS vernieuwen, update, herstart) en logboek nakijken
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet
