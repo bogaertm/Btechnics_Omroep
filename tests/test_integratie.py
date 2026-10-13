@@ -623,3 +623,17 @@ async def test_geschiedenis(hass: HomeAssistant, ingesteld, nep, hass_admin_user
     items = staat.attributes["items"]
     assert [i["wie"] for i in items] == ["Planning", hass_admin_user.name]
     assert items[0]["keer"] == "2/2" and items[0]["ok"] is True and items[0]["bericht"] == "test bericht.mp3"
+
+
+async def test_sessie_dicht_bij_afsluiten_en_herladen(hass: HomeAssistant, ingesteld) -> None:
+    from homeassistant.const import EVENT_HOMEASSISTANT_CLOSE
+
+    sessie = ingesteld.runtime_data.sessie
+    assert await hass.config_entries.async_reload(ingesteld.entry_id)
+    await hass.async_block_till_done()
+    assert sessie.closed  # oude sessie dicht na herladen
+    nieuwe = ingesteld.runtime_data.sessie
+    assert not nieuwe.closed
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_CLOSE)
+    await hass.async_block_till_done()
+    assert nieuwe.closed  # HA afsluiten ontlaadt niet, maar de sessie gaat toch dicht

@@ -19,7 +19,7 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.network import async_get_source_ip
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import CONF_HOST, Platform
+from homeassistant.const import CONF_HOST, EVENT_HOMEASSISTANT_CLOSE, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
@@ -111,27 +111,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmroepConfigEntry) -> bo
     host = entry.data[CONF_HOST]
     # eigen sessie zonder keep-alive: de DLNA renderer sluit verbindingen na een bericht
     sessie = aiohttp.ClientSession(connector=aiohttp.TCPConnector(force_close=True))
-    tuner = FrontierOmroep(sessie, host, entry.options.get(CONF_PIN, entry.data.get(CONF_PIN, DEFAULT_PIN)))
+
+    async def _sluit_sessie(_event=None) -> None:
+        if not sessie.closed:
+            await sessie.close()
+
     try:
-        await tuner.bronnen()
-    except TunerFout as err:
-        await sessie.close()
-        raise ConfigEntryNotReady(f"Tuner {host} niet bereikbaar: {err}") from err
-    # één wachtrij per tuner, die ook een herlaad van de integratie overleeft
-    lock = hass.data[DOMAIN].setdefault("locks", {}).setdefault(host, asyncio.Lock())
-    coordinator = OmroepCoordinator(hass, tuner, lock)
-    try:
+        tuner = FrontierOmroep(sessie, host, entry.options.get(CONF_PIN, entry.data.get(CONF_PIN, DEFAULT_PIN)))
+        try:
+            await tuner.bronnen()
+        except TunerFout as err:
+            raise ConfigEntryNotReady(f"Tuner {host} niet bereikbaar: {err}") from err
+        # één wachtrij per tuner, die ook een herlaad van de integratie overleeft
+        lock = hass.data[DOMAIN].setdefault("locks", {}).setdefault(host, asyncio.Lock())
+        coordinator = OmroepCoordinator(hass, tuner, lock)
         await coordinator.async_config_entry_first_refresh()
-    except ConfigEntryNotReady:
-        await sessie.close()
+        store = Store(hass, 1, f"{DOMAIN}.geschiedenis.{entry.entry_id}")
+        entry.runtime_data = OmroepData(
+            tuner=tuner, sessie=sessie, lock=lock, coordinator=coordinator,
+            store=store, geschiedenis=(await store.async_load()) or [],
+        )
+        await hass.async_add_executor_job(_maak_omroepmap, hass)
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        await _sluit_sessie()
         raise
-    store = Store(hass, 1, f"{DOMAIN}.geschiedenis.{entry.entry_id}")
-    entry.runtime_data = OmroepData(
-        tuner=tuner, sessie=sessie, lock=lock, coordinator=coordinator,
-        store=store, geschiedenis=(await store.async_load()) or [],
-    )
-    await hass.async_add_executor_job(_maak_omroepmap, hass)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # bij afsluiten of herstart van HA wordt de integratie niet ontladen: sessie dan zelf sluiten
+    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_CLOSE, _sluit_sessie))
     entry.async_on_unload(entry.add_update_listener(_opties_gewijzigd))
     return True
 
