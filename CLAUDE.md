@@ -40,4 +40,5 @@ Eerste toepassing: omroep in een magazijn, met Home Assistant op een Raspberry P
 - [x] Melding "Unclosed client session": eigen sessie wordt nu gesloten bij afsluiten HA (v0.4.1)
 - [x] HACS download 404 (refs/heads/<commit>.zip): vanaf nu met GitHub releases werken (v0.4.1 gepubliceerd); release maken via gh op de Mac, niet vanuit de cloud
 - [ ] v0.4.1 installeren op de HA van de klant (HACS vernieuwen, update, herstart) en logboek nakijken
+- [ ] Openingsuren door klant aan te passen op dashboard (vraag Defrancq 13/10): 8 tijdvelden (zomer en winter, telkens ma tot vr en zaterdag, start en einde; zelfde uur = gesloten), binary_sensor.magazijn_open daarop baseren, meer niet aanpasbaar
 - [ ] Zender JOE (en andere gebruikte zenders) in de favorieten van de tuner zetten, anders kan herstel via favoriet niet
